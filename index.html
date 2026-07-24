@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lindy Durability Scorecard</title>
+<meta name="description" content="A durability scorecard for orthopaedic and medical literature, based on OpenAlex citation data.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>Lindy Durability Scorecard</h1>
+  <p class="subtitle">
+    Citation counts measure attention, not lasting value. This tool computes three bibliometric proxies for
+    durability — sustained citation rate, citation half-life, and cross-specialty diffusion — from
+    <a href="https://openalex.org">OpenAlex</a> data, and leaves two further dimensions (educational reuse,
+    expert-validated relevance) as explicit human-judgment fields, excluded from the score.
+  </p>
+  <div class="disclaimer-banner">
+    The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>. It omits
+    the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet peaked
+    and declined, are deliberately not scored — see <a href="#methodology">how this is computed</a>.
+  </div>
+</header>
+
+<main>
+
+<section aria-labelledby="input-heading">
+  <h2 id="input-heading">Papers</h2>
+  <form id="paper-form">
+    <div id="doi-rows"></div>
+    <div class="export-row">
+      <button type="button" id="add-paper-btn">+ Add another paper (up to 5)</button>
+      <button type="submit" class="primary">Analyze</button>
+    </div>
+    <div id="status-area" class="status-msg" aria-live="polite"></div>
+    <div id="disambiguation-area"></div>
+  </form>
+  <p class="weights-note">Accepts a DOI (with or without the <code>https://doi.org/</code> prefix) or, for
+  pre-DOI works, a title to search OpenAlex for.</p>
+</section>
+
+<section aria-labelledby="settings-heading">
+  <h2 id="settings-heading">Scoring settings</h2>
+  <p class="weights-note">Everything here recomputes instantly against already-fetched data — no need to re-fetch to try different assumptions.</p>
+
+  <fieldset>
+    <legend>Composite score constants</legend>
+    <div class="controls-grid">
+      <div class="control">
+        <label for="half-life-reference">Half-life reference (years)</label>
+        <input type="number" id="half-life-reference" min="1" step="1">
+      </div>
+      <div class="control">
+        <label for="max-effective-fields">Max effective fields (diffusion normalizer)</label>
+        <input type="number" id="max-effective-fields" min="1" step="0.5">
+      </div>
+      <div class="control">
+        <label for="weight-sustained">Weight — sustained rate</label>
+        <input type="number" id="weight-sustained" min="0" max="1" step="0.05">
+      </div>
+      <div class="control">
+        <label for="weight-aging">Weight — aging</label>
+        <input type="number" id="weight-aging" min="0" max="1" step="0.05">
+      </div>
+      <div class="control">
+        <label for="weight-diffusion">Weight — diffusion</label>
+        <input type="number" id="weight-diffusion" min="0" max="1" step="0.05">
+      </div>
+    </div>
+    <p class="weights-note">Composite = 100 × weighted mean of the three 0–1 sub-scores. Weights need not sum to 1 exactly — they're normalized at compute time.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Diffusion measure feeding the composite</legend>
+    <div class="radio-group" role="radiogroup" aria-label="Diffusion measure used for composite score">
+      <label><input type="radio" name="diffusion-measure" id="diffusion-measure-topShare" value="topShare"> 1 − largest field's share of total citations</label>
+      <label><input type="radio" name="diffusion-measure" id="diffusion-measure-richness" value="richness"> Field richness (raw count of distinct citing fields), ÷ max effective fields</label>
+      <label><input type="radio" name="diffusion-measure" id="diffusion-measure-effectiveFields" value="effectiveFields"> Effective number of fields, exp(Shannon entropy), ÷ max effective fields (default)</label>
+      <label><input type="radio" name="diffusion-measure" id="diffusion-measure-raoStirling" value="raoStirling"> Rao-Stirling-style distance-weighted diversity, anchored at the paper's home subfield</label>
+    </div>
+  </fieldset>
+
+  <fieldset>
+    <legend>Peak / half-life smoothing basis</legend>
+    <div class="radio-group" role="radiogroup" aria-label="Smoothing basis for peak and half-life">
+      <label><input type="radio" name="smoothing-window" id="smoothing-window-1" value="1"> Raw, unsmoothed annual counts</label>
+      <label><input type="radio" name="smoothing-window" id="smoothing-window-3" value="3"> 3-year centered moving average (default)</label>
+      <label><input type="radio" name="smoothing-window" id="smoothing-window-5" value="5"> 5-year centered moving average</label>
+    </div>
+    <p class="weights-note">A single unusually high year (an indexing artifact, not a real citation spike) can
+      register as an inflated peak immediately followed by a false "decline" in the raw series. Smoothing feeds
+      both the half-life calculation and the sustained-rate sub-score's denominator so they rest on the same
+      basis. The raw, unsmoothed half-life is always shown alongside the active basis on every scorecard — see
+      also the outlier flags below each chart, which name the specific years driving this.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Field merging</legend>
+    <label><input type="checkbox" id="merge-toggle"> Apply field merge rules to the diffusion calculation (off by default — raw OpenAlex tags are shown either way)</label>
+    <div id="merge-rules-editor" style="margin-top:0.6rem;"></div>
+    <div class="export-row">
+      <button type="button" id="add-merge-rule">+ Add merge rule</button>
+      <button type="button" id="reset-merge-rules">Reset to default (Epidemiology + Surgery → Orthopedic Surgery)</button>
+    </div>
+    <p class="weights-note">OpenAlex subfield tags are sometimes substantively wrong for this literature — e.g. many orthopaedic papers get tagged "Epidemiology" rather than "Surgery." Merge rules are a user reclassification, not source data, and are always shown alongside the untouched raw tags.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Rare-field noise threshold</legend>
+    <label><input type="checkbox" id="threshold-toggle"> Exclude fields below a minimum size (off by default)</label>
+    <div class="controls-grid" style="margin-top:0.5rem;">
+      <div class="control">
+        <label for="threshold-min-works">Minimum citing works</label>
+        <input type="number" id="threshold-min-works" min="0" step="1">
+      </div>
+      <div class="control">
+        <label for="threshold-min-pct">Minimum % of total citations</label>
+        <input type="number" id="threshold-min-pct" min="0" step="0.1">
+      </div>
+    </div>
+    <p class="weights-note">A field must fail <em>both</em> the citing-works and the percent test to survive the join — i.e. it's dropped if it's under the works threshold OR under the percent threshold. Richness and the entropy-based measures are far more sensitive to this than the top-share measure; compare the scorecard's raw/merged diffusion table with the toggle on and off.</p>
+  </fieldset>
+</section>
+
+<section aria-labelledby="results-heading">
+  <h2 id="results-heading">Scorecards</h2>
+  <div id="scorecards" class="scorecards"></div>
+</section>
+
+<section aria-labelledby="compare-heading">
+  <h2 id="compare-heading">Comparison</h2>
+  <div id="comparison-table-wrap"></div>
+</section>
+
+<section aria-labelledby="chart-heading">
+  <h2 id="chart-heading">Citations per year</h2>
+  <div class="chart-wrap">
+    <div class="chart-controls">
+      <fieldset style="border:none;padding:0;margin:0;">
+        <legend class="sr-only">Chart x-axis</legend>
+        <label><input type="radio" name="chart-xaxis" id="chart-xaxis-calendar" value="calendar" checked> Calendar year</label>
+        <label><input type="radio" name="chart-xaxis" id="chart-xaxis-since" value="sincePublication"> Years since publication</label>
+      </fieldset>
+    </div>
+    <canvas id="chart-canvas" role="img" aria-label="Citations per year for the loaded papers"></canvas>
+    <div id="chart-legend" class="legend"></div>
+  </div>
+</section>
+
+<section aria-labelledby="export-heading">
+  <h2 id="export-heading">Export</h2>
+  <div class="export-row">
+    <button type="button" id="export-csv-btn" disabled>Export CSV (data, diffusion measures, scores, settings)</button>
+    <button type="button" id="export-png-btn" disabled>Export chart as PNG</button>
+  </div>
+</section>
+
+<section id="methodology" class="methodology" aria-labelledby="methodology-heading">
+  <h2 id="methodology-heading">How this is computed, and what it cannot tell you</h2>
+  <dl>
+    <dt>Data source</dt>
+    <dd>OpenAlex REST API, no authentication, queried live in your browser. The annual citation series is built
+      from <code>works?filter=cites:{id}&amp;group_by=publication_year</code> — every citing work grouped by its
+      own publication year. This is the same query OpenAlex's own web interface uses for its Year facet, and it
+      returns complete history with no truncation. Field breakdown comes from the analogous
+      <code>works?filter=cites:{id}&amp;group_by=primary_topic.subfield.id</code>. Both group_by calls request the
+      maximum 200 groups per page; a citation-year span or field count exceeding 200 is flagged defensively,
+      though no real paper approaches that. Citing works with no recorded publication year are reported
+      separately and excluded from the annual series, not silently dropped.</dd>
+
+    <dt>Two citation totals, shown side by side</dt>
+    <dd>This tool deliberately avoids the Work object's precomputed <code>counts_by_year</code> field: it's a
+      periodically-refreshed shortcut capped at roughly the last decade, which is why an earlier version of this
+      tool showed a truncated series and a suspiciously recent "peak year" for older papers. Instead, every
+      annual count and the total citing-works figure are derived directly from the <code>cites:</code> filter
+      above. That live total can differ slightly from the Work object's own cached <code>cited_by_count</code> —
+      OpenAlex documents that the two are refreshed on different schedules — so both are shown on each scorecard
+      rather than treating either as the "wrong" one. All calculations here use the live <code>cites:</code>
+      filter total.</dd>
+
+    <dt>Series-start check</dt>
+    <dd>The tool checks that the earliest citing work is reasonably close to the paper's own publication year
+      (within 5 years) and flags it on the scorecard if not — this can indicate
+      an indexing gap rather than a genuinely slow-to-be-cited paper. Since the series is now the complete
+      history rather than a capped recent window, this is a plausibility check, not a truncation warning.</dd>
+
+    <dt>Citation persistence</dt>
+    <dd>Sum of citations over the last five complete calendar years (the current, still-in-progress year is
+      excluded). "Still rising" means the most recent complete year is at or above every other year in the
+      returned series.</dd>
+
+    <dt>Citation half-life</dt>
+    <dd>Years from the peak annual-citation year to the first later year whose annual count falls to at or below
+      half the peak value. If no later year ever does, this is reported as "not reached after N years" rather
+      than assigning an arbitrary number.
+      <br><br>
+      <strong>Smoothing basis.</strong> A single unusually high year — an indexing artifact rather than a real
+      citation spike — can register as an inflated "peak" immediately followed by a false "decline" the very
+      next year. (Concretely: Salter &amp; Harris 1963 shows 1999=17, 2000=79, 2001=31 in an otherwise smooth
+      series — the raw definition reads that as a peak of 79 reached and half-life exhausted in a single year,
+      which the surrounding two decades of continued high citation do not support.) The default basis is
+      therefore a <strong>3-year centered moving average</strong>: each year's smoothed value is the mean of
+      itself and its immediate calendar neighbours (at the start/end of the series, whatever window is
+      available, rather than dropping those years). Peak and half-life are identified on this smoothed curve,
+      and the smoothed peak — not the raw one — is also the denominator for the sustained-rate sub-score below,
+      so both metrics rest on the same basis. You can switch the basis to raw (unsmoothed) or a 5-year average
+      above; <strong>the raw, unsmoothed half-life is always shown alongside the active basis on every
+      scorecard</strong>, never hidden in favor of the smoothed one.</dd>
+
+    <dt>Outlier detection</dt>
+    <dd>Independent of which smoothing basis is active, every year with more than 6 raw citations is checked
+      against its own immediate neighbours: it's flagged as a possible indexing artifact if its raw count
+      exceeds 2.5× the mean of the year before and the year after (edge years, with only one neighbour, aren't
+      checked). The 6-citation floor exists because an old or obscure paper's sparse early history is mostly
+      single digits, where a jump from 1 citation to 5 clears the same 2.5× ratio as 79 against a peer group of
+      24 — real in relative terms, meaningless in absolute ones — and would otherwise bury a genuine artifact
+      under a wall of trivial flags. This is a diagnostic shown alongside the half-life table, not a silent data
+      correction — flagged years are not removed or altered anywhere in the underlying series or the CSV
+      export.</dd>
+
+    <dt>Cross-specialty diffusion — denominator</dt>
+    <dd>Displayed field shares and the "1 − top share" measure use the <strong>live citing-works total</strong>
+      (the same <code>cites:</code> filter total described above) as the denominator, per spec — they will not
+      sum to 100% since some citing works are untagged. The entropy-based measures (effective number of fields,
+      its normalized form) and the Rao-Stirling measure instead renormalize shares among <em>tagged</em> citing
+      works only, because <code>exp(Shannon entropy)</code> is only a meaningful "effective category count" over
+      a distribution that sums to 1. This denominator split is a deliberate, documented choice — see the CSV
+      export for both the raw counts and every derived share.</dd>
+
+    <dt>Diffusion measures</dt>
+    <dd>Four are computed and shown for every paper: (a) 1 − largest field's share, (b) field richness (raw
+      distinct-field count), (c) effective number of fields = exp(Shannon entropy), plus its normalized form
+      H / ln(S), and (d) a Rao-Stirling-style distance-weighted diversity anchored at the paper's own primary
+      subfield, where citing fields sharing a parent field score distance 0.33, sharing only a domain score
+      0.66, and otherwise score 1.0. One measure — selectable above, default (c) — feeds the composite as
+      min(measure / max-effective-fields, 1.0), except (a) and (d) which are already 0–1.</dd>
+
+    <dt>Field merging</dt>
+    <dd>Off by default. When enabled, user-defined rules combine two or more raw OpenAlex subfield tags into
+      one relabeled field before diffusion is recomputed. Raw and merged shares are always shown side by side,
+      never merged alone, and the rules are written into the CSV export.</dd>
+
+    <dt>Durability score</dt>
+    <dd>
+      Sustained rate = mean annual citations over the last 5 complete years ÷ peak annual citations
+      <em>on the active smoothing basis</em>, capped at 1.0.<br>
+      Aging = 1.0 if half-life (active basis) was never reached; otherwise min(half-life years ÷ half-life
+      reference, 1.0).<br>
+      Diffusion = the selected measure above, as a 0–1 sub-score.<br>
+      Composite = 100 × weighted mean of the three (default weights 1/3 each). Bands: ≥70 Durable,
+      40–69 Moderately durable, &lt;40 Faded.
+    </dd>
+
+    <dt>Age gate</dt>
+    <dd>Overrides the bands. If the paper is under 10 years old, or its annual series (on the active smoothing
+      basis) has not yet peaked and declined, no score is shown — the tool reports "Too recent to judge" and
+      displays the components as provisional context. This is deliberate: scoring a paper with no established
+      citation trajectory yet is the overclaim this project argues against.</dd>
+
+    <dt>What this cannot tell you</dt>
+    <dd>Whether a paper is <em>correct</em>, whether it's still clinically relevant, or whether practitioners
+      actually still teach from it. Those are the two human-judgment fields on each scorecard, entered by you,
+      never computed, and never included in the composite.</dd>
+  </dl>
+</section>
+
+</main>
+
+<footer>
+  <p>Data via the <a href="https://openalex.org">OpenAlex</a> API. No data leaves your browser except requests
+  to OpenAlex; nothing is stored server-side because there is no server.</p>
+</footer>
+
+<script src="subfields-data.js"></script>
+<script src="app.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>
