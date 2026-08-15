@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this tool, please cite it as below."
+title: "lindy-score: A Durability Scorecard for Orthopaedic and Medical Literature"
+type: software
+authors:
+  - family-names: Baril
+    given-names: Maxime
+version: 1.1
+date-released: 2026-08-15
+doi: 10.5281/zenodo.21953674
+url: "https://maxbaril.github.io/lindy-score/"
+repository-code: "https://github.com/maxbaril/lindy-score"
+license: MIT
