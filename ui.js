@@ -16,6 +16,7 @@ const state = {
     weights: { ...CONFIG.WEIGHTS },
     diffusionMeasure: CONFIG.DIFFUSION_DEFAULT_MEASURE,
     smoothingWindow: CONFIG.SMOOTHING_WINDOW_DEFAULT, // 1 (raw) | 3 | 5 — basis for peak/half-life/sustained-rate
+    sustainYears: CONFIG.SUSTAIN_YEARS_DEFAULT,       // consecutive years <= half peak required to call half-life "reached". 1 = old single-year rule.
     useMerge: false,
     mergeRules: CONFIG.DEFAULT_MERGE_RULES.map(r => ({ targetLabel: r.targetLabel, sourceNames: [...r.sourceNames] })),
     threshold: { enabled: false, minWorks: CONFIG.RARE_FIELD_MIN_WORKS, minPct: CONFIG.RARE_FIELD_MIN_PCT },
@@ -170,11 +171,12 @@ function readWeightsFromForm() {
 function wireSettingsPanel() {
   $('#half-life-reference').value = state.settings.halfLifeReference;
   $('#max-effective-fields').value = state.settings.maxEffectiveFields;
-  $('#weight-sustained').value = state.settings.weights.sustained;
-  $('#weight-aging').value = state.settings.weights.aging;
-  $('#weight-diffusion').value = state.settings.weights.diffusion;
+  $('#weight-sustained').value = fmt2(state.settings.weights.sustained);
+  $('#weight-aging').value = fmt2(state.settings.weights.aging);
+  $('#weight-diffusion').value = fmt2(state.settings.weights.diffusion);
   $(`#diffusion-measure-${state.settings.diffusionMeasure}`).checked = true;
   $(`#smoothing-window-${state.settings.smoothingWindow}`).checked = true;
+  $(`#sustain-years-${state.settings.sustainYears}`).checked = true;
   $('#merge-toggle').checked = state.settings.useMerge;
   $('#threshold-toggle').checked = state.settings.threshold.enabled;
   $('#threshold-min-works').value = state.settings.threshold.minWorks;
@@ -193,6 +195,9 @@ function wireSettingsPanel() {
   });
   document.querySelectorAll('input[name=smoothing-window]').forEach(r => {
     r.addEventListener('change', e => { state.settings.smoothingWindow = parseInt(e.target.value, 10); recalc(); });
+  });
+  document.querySelectorAll('input[name=sustain-years]').forEach(r => {
+    r.addEventListener('change', e => { state.settings.sustainYears = parseInt(e.target.value, 10); recalc(); });
   });
   $('#merge-toggle').addEventListener('change', e => { state.settings.useMerge = e.target.checked; recalc(); });
   $('#threshold-toggle').addEventListener('change', e => { state.settings.threshold.enabled = e.target.checked; recalc(); });
@@ -284,6 +289,9 @@ function buildScorecard(paper, a, colorIndex) {
   if (persistence.yearsAvailableInWindow < 5) {
     warnings.push(`Only ${persistence.yearsAvailableInWindow} of the last 5 complete years are present in the returned series.`);
   }
+  if (a.volumeGated) {
+    warnings.push(`Volume gate: the active basis's smoothed peak (${fmt1(a.halfLife.peakValue)}/yr) is below ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr — too little citation volume for smoothing or the sustained-decline rule to fix. Half-life is not reported and the aging sub-score is dropped from the composite below, renormalized over sustained rate and diffusion only.`);
+  }
 
   let scoreBlock;
   if (!gate.passes) {
@@ -307,13 +315,14 @@ function buildScorecard(paper, a, colorIndex) {
 
   const subList = el('ul', { class: 'subscore-list' }, [
     el('li', {}, [el('span', { text: 'Sustained rate' }), el('span', { text: fmt2(subScores.sustained) })]),
-    el('li', {}, [el('span', { text: 'Aging' }), el('span', { text: fmt2(subScores.aging) })]),
+    el('li', {}, [el('span', { text: 'Aging' }), el('span', { text: a.volumeGated ? 'dropped (volume gate)' : fmt2(subScores.aging) })]),
     el('li', {}, [el('span', { text: `Diffusion (${diffusionMeasureLabel(state.settings.diffusionMeasure)})` }), el('span', { text: fmt2(subScores.diffusion) })]),
   ]);
 
   const weightsNote = el('p', { class: 'weights-note', text:
-    `Weights used: sustained ${fmt2(state.settings.weights.sustained)} · aging ${fmt2(state.settings.weights.aging)} · diffusion ${fmt2(state.settings.weights.diffusion)}. ` +
-    `Smoothing basis: ${windowLabel(a.activeSmoothingWindow)}. Field merge: ${state.settings.useMerge ? 'ON' : 'OFF'}. This score is a provisional heuristic, not a validated instrument, and excludes the two human-judgment dimensions below.`
+    `Weights used: sustained ${fmt2(state.settings.weights.sustained)} · aging ${a.volumeGated ? 'dropped' : fmt2(state.settings.weights.aging)} · diffusion ${fmt2(state.settings.weights.diffusion)}` +
+    (a.volumeGated ? ' (renormalized over the remaining two)' : '') + '. ' +
+    `Smoothing basis: ${windowLabel(a.activeSmoothingWindow)}, sustain ${a.activeSustainYears}yr. Field merge: ${state.settings.useMerge ? 'ON' : 'OFF'}. This score is a provisional heuristic, not a validated instrument, and excludes the two human-judgment dimensions below.`
   });
 
   const metricsBlock = el('div', {}, [
@@ -350,24 +359,37 @@ function windowLabel(w) {
 }
 
 function formatHalfLifeCell(hl, lastCompleteYear) {
+  if (hl.peakValue !== null && hl.peakValue < CONFIG.VOLUME_GATE_MIN_PEAK) {
+    return `not reported (peak < ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr)`;
+  }
   if (hl.halfLifeYears !== null) return `${hl.halfLifeYears} yr`;
   if (hl.peakYear === null) return '—';
   return `not reached after ${lastCompleteYear - hl.peakYear} yr`;
 }
 
-/** Always shows raw alongside every smoothed basis — never just the active one. */
+/** Always shows raw alongside every smoothed basis, and the original single-year
+ *  rule alongside the active sustained-decline requirement — never just the
+ *  active combination. */
 function buildHalfLifeTable(a) {
   const windows = [1, 3, 5];
-  const rows = windows.map(w => {
-    const hl = a.halfLifeByWindow[w];
-    return [
-      windowLabel(w) + (w === a.activeSmoothingWindow ? ' (active)' : ''),
-      hl.peakYear !== null ? `${hl.peakYear} (${fmt1(hl.peakValue)})` : '—',
-      formatHalfLifeCell(hl, a.norm.lastCompleteYear),
-    ];
-  });
+  const refHl = a.halfLifeInstantaneousRaw;
+  const rows = [
+    [
+      'Raw, single-year rule (reference, always shown)',
+      refHl.peakYear !== null ? `${refHl.peakYear} (${fmt1(refHl.peakValue)})` : '—',
+      formatHalfLifeCell(refHl, a.norm.lastCompleteYear),
+    ],
+    ...windows.map(w => {
+      const hl = a.halfLifeByWindow[w];
+      return [
+        `${windowLabel(w)}, sustain ${a.activeSustainYears}yr` + (w === a.activeSmoothingWindow ? ' (active)' : ''),
+        hl.peakYear !== null ? `${hl.peakYear} (${fmt1(hl.peakValue)})` : '—',
+        formatHalfLifeCell(hl, a.norm.lastCompleteYear),
+      ];
+    }),
+  ];
   const table = el('table', {}, [
-    el('caption', { text: 'Peak and half-life under each smoothing basis. The active basis feeds the sustained-rate and aging sub-scores; the others are shown for comparison.' }),
+    el('caption', { text: `Peak and half-life under each smoothing basis, at the active sustained-decline requirement (${a.activeSustainYears} consecutive year${a.activeSustainYears === 1 ? '' : 's'}). The active row feeds the sustained-rate and aging sub-scores; the reference row is the original single-year rule, always shown regardless of settings.` }),
     el('thead', {}, el('tr', {}, [el('th', { text: 'Basis' }), el('th', { text: 'Peak (yr / value)' }), el('th', { text: 'Half-life' })])),
     el('tbody', {}, rows.map(r => el('tr', {}, r.map((c, i) => el(i === 0 ? 'th' : 'td', { scope: i === 0 ? 'row' : undefined, text: String(c) }))))),
   ]);
@@ -433,9 +455,9 @@ function renderComparisonTable(items) {
   container.innerHTML = '';
   if (items.length < 1) return;
 
-  const cols = ['Paper', 'Year', 'Citing works (cites: filter)', 'Stored cited_by_count', 'Last-5yr sum', 'Still rising?', `Peak (yr/val, ${windowLabel(state.settings.smoothingWindow)})`, 'Half-life (active basis)', 'Composite', 'Band'];
+  const cols = ['Paper', 'Year', 'Citing works (cites: filter)', 'Stored cited_by_count', 'Last-5yr sum', 'Still rising?', `Peak (yr/val, ${windowLabel(state.settings.smoothingWindow)})`, `Half-life (sustain ${state.settings.sustainYears}yr)`, 'Composite', 'Band'];
   const table = el('table', {}, [
-    el('caption', { text: 'Comparison across loaded papers, under current settings. Peak/half-life use the active smoothing basis — see each scorecard for raw alongside 3-year and 5-year.' }),
+    el('caption', { text: 'Comparison across loaded papers, under current settings. Peak/half-life use the active smoothing basis and sustained-decline requirement — see each scorecard for the full breakdown.' }),
     el('thead', {}, el('tr', {}, cols.map(c => el('th', { text: c })))),
     el('tbody', {}, items.map(({ paper, analysis: a }, i) => el('tr', {}, [
       el('th', { scope: 'row', text: a.work.display_name.slice(0, 40) + (a.work.display_name.length > 40 ? '…' : '') }),
@@ -581,6 +603,8 @@ function buildCsv(items) {
   lines.push(`# Weights: sustained=${state.settings.weights.sustained}, aging=${state.settings.weights.aging}, diffusion=${state.settings.weights.diffusion}`);
   lines.push(`# Diffusion measure used for composite: ${state.settings.diffusionMeasure}`);
   lines.push(`# Smoothing basis used for peak/half-life/sustained-rate: ${state.settings.smoothingWindow}-year (1 = raw/unsmoothed); outlier flag threshold: ${CONFIG.OUTLIER_RATIO_THRESHOLD}x neighbour mean, minimum ${CONFIG.OUTLIER_MIN_COUNT} raw citations to be eligible`);
+  lines.push(`# Sustained-decline requirement: half-life reached only after ${state.settings.sustainYears} consecutive year(s) <= half peak (1 = original single-year rule)`);
+  lines.push(`# Volume gate: below smoothed peak ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr (active basis), half-life withheld and aging sub-score dropped from composite (renormalized)`);
   lines.push(`# Field merge applied: ${state.settings.useMerge}`);
   lines.push(`# Merge rules: ${JSON.stringify(state.settings.mergeRules)}`);
   lines.push(`# Rare-field threshold: enabled=${state.settings.threshold.enabled}, minWorks=${state.settings.threshold.minWorks}, minPct=${state.settings.threshold.minPct}`);
@@ -599,23 +623,32 @@ function buildCsv(items) {
   });
   lines.push('');
 
-  lines.push('paper,persistence_sum_last5,still_rising,active_smoothing_window,peak_year,peak_value,half_life_years,half_life_reached,sustained_subscore,aging_subscore,diffusion_subscore,composite,band,gate_passes,gate_reason');
+  lines.push('paper,persistence_sum_last5,still_rising,active_smoothing_window,active_sustain_years,peak_year,peak_value,volume_gated,half_life_years,half_life_reached,sustained_subscore,aging_subscore,diffusion_subscore,composite,band,gate_passes,gate_reason');
   items.forEach(({ analysis: a }) => {
     lines.push([
-      a.work.display_name, a.persistence.sum, a.persistence.stillRising, a.activeSmoothingWindow,
-      a.halfLife.peakYear, a.halfLife.peakValue, a.halfLife.halfLifeYears, a.halfLife.reached,
+      a.work.display_name, a.persistence.sum, a.persistence.stillRising, a.activeSmoothingWindow, a.activeSustainYears,
+      a.halfLife.peakYear, a.halfLife.peakValue, a.volumeGated,
+      a.volumeGated ? null : a.halfLife.halfLifeYears, a.volumeGated ? null : a.halfLife.reached,
       a.subScores.sustained, a.subScores.aging, a.subScores.diffusion,
       a.composite, a.band, a.gate.passes, a.gate.reason,
     ].map(csvEscape).join(','));
   });
   lines.push('');
 
-  lines.push('# Peak/half-life under every smoothing basis, for comparison (not just the active one above)');
-  lines.push('paper,smoothing_window,peak_year,peak_value,half_life_years,half_life_reached');
+  lines.push('# Reference: original single-year rule, raw series, always reported regardless of settings');
+  lines.push('paper,peak_year,peak_value,half_life_years,half_life_reached');
+  items.forEach(({ analysis: a }) => {
+    const hl = a.halfLifeInstantaneousRaw;
+    lines.push([a.work.display_name, hl.peakYear, hl.peakValue, hl.halfLifeYears, hl.reached].map(csvEscape).join(','));
+  });
+  lines.push('');
+
+  lines.push('# Peak/half-life under every smoothing basis, at the active sustain_years above (not just the active smoothing basis)');
+  lines.push('paper,smoothing_window,sustain_years,peak_year,peak_value,half_life_years,half_life_reached');
   items.forEach(({ analysis: a }) => {
     [1, 3, 5].forEach(w => {
       const hl = a.halfLifeByWindow[w];
-      lines.push([a.work.display_name, w, hl.peakYear, hl.peakValue, hl.halfLifeYears, hl.reached].map(csvEscape).join(','));
+      lines.push([a.work.display_name, w, a.activeSustainYears, hl.peakYear, hl.peakValue, hl.halfLifeYears, hl.reached].map(csvEscape).join(','));
     });
   });
   lines.push('');

@@ -126,6 +126,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 0.8rem 1.2rem;
 }
+.controls-grid-2 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); max-width: 32rem; }
+.controls-grid-3 { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); max-width: 42rem; }
+.controls-subhead {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  color: var(--text-muted);
+  margin: 0.9rem 0 0.5rem;
+}
+.controls-subhead:first-of-type { margin-top: 0; }
 .control label {
   display: block;
   font-size: 0.85rem;

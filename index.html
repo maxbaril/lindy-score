@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lindy Durability Scorecard</title>
 <meta name="description" content="A durability scorecard for orthopaedic and medical literature, based on OpenAlex citation data.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%E2%8F%B3%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -47,29 +48,35 @@
 
   <fieldset>
     <legend>Composite score constants</legend>
-    <div class="controls-grid">
+    <p class="controls-subhead">Reference values</p>
+    <div class="controls-grid controls-grid-2">
       <div class="control">
         <label for="half-life-reference">Half-life reference (years)</label>
         <input type="number" id="half-life-reference" min="1" step="1">
       </div>
       <div class="control">
-        <label for="max-effective-fields">Max effective fields (diffusion normalizer)</label>
+        <label for="max-effective-fields">Max effective fields</label>
         <input type="number" id="max-effective-fields" min="1" step="0.5">
       </div>
+    </div>
+    <p class="controls-subhead">Weights (need not sum to 1 — normalized at compute time)</p>
+    <div class="controls-grid controls-grid-3">
       <div class="control">
-        <label for="weight-sustained">Weight — sustained rate</label>
+        <label for="weight-sustained">Sustained rate</label>
         <input type="number" id="weight-sustained" min="0" max="1" step="0.05">
       </div>
       <div class="control">
-        <label for="weight-aging">Weight — aging</label>
+        <label for="weight-aging">Aging</label>
         <input type="number" id="weight-aging" min="0" max="1" step="0.05">
       </div>
       <div class="control">
-        <label for="weight-diffusion">Weight — diffusion</label>
+        <label for="weight-diffusion">Diffusion</label>
         <input type="number" id="weight-diffusion" min="0" max="1" step="0.05">
       </div>
     </div>
-    <p class="weights-note">Composite = 100 × weighted mean of the three 0–1 sub-scores. Weights need not sum to 1 exactly — they're normalized at compute time.</p>
+    <p class="weights-note">Composite = 100 × weighted mean of the three 0–1 sub-scores. "Max effective fields" is
+      the divisor for diffusion sub-scores derived from a field count (richness, effective-fields) — see
+      <a href="#methodology">how this is computed</a>.</p>
   </fieldset>
 
   <fieldset>
@@ -94,6 +101,24 @@
       both the half-life calculation and the sustained-rate sub-score's denominator so they rest on the same
       basis. The raw, unsmoothed half-life is always shown alongside the active basis on every scorecard — see
       also the outlier flags below each chart, which name the specific years driving this.</p>
+  </fieldset>
+
+  <fieldset>
+    <legend>Sustained-decline requirement for half-life</legend>
+    <div class="radio-group" role="radiogroup" aria-label="Consecutive years required at or below half peak">
+      <label><input type="radio" name="sustain-years" id="sustain-years-1" value="1"> 1 year (original single-year rule)</label>
+      <label><input type="radio" name="sustain-years" id="sustain-years-2" value="2"> 2 consecutive years</label>
+      <label><input type="radio" name="sustain-years" id="sustain-years-3" value="3"> 3 consecutive years (default)</label>
+      <label><input type="radio" name="sustain-years" id="sustain-years-4" value="4"> 4 consecutive years</label>
+    </div>
+    <p class="weights-note">Half-life is "reached" at the first later year that begins a run of this many
+      consecutive years all at or below half the (smoothed) peak, rather than any single year dipping below it
+      once. Monte Carlo simulation under negative-binomial citation noise found the single-year rule flags a
+      spurious half-life on a genuinely flat, non-declining series roughly 71–89% of the time; requiring several
+      consecutive years reduces this substantially without materially reducing detection of real declines
+      (&gt;=95% in the same simulation across every condition tested) — see
+      <a href="#methodology">how this is computed</a> for the full comparison. The original single-year result on
+      the raw series is always shown for reference regardless of this setting.</p>
   </fieldset>
 
   <fieldset>
@@ -192,22 +217,86 @@
       returned series.</dd>
 
     <dt>Citation half-life</dt>
-    <dd>Years from the peak annual-citation year to the first later year whose annual count falls to at or below
-      half the peak value. If no later year ever does, this is reported as "not reached after N years" rather
-      than assigning an arbitrary number.
+    <dd>Years from the peak annual-citation year to the first later year that begins a run of several
+      consecutive years all at or below half the peak value (see "sustained-decline requirement" below). If no
+      such run ever occurs, this is reported as "not reached after N years" rather than assigning an arbitrary
+      number.
       <br><br>
       <strong>Smoothing basis.</strong> A single unusually high year — an indexing artifact rather than a real
-      citation spike — can register as an inflated "peak" immediately followed by a false "decline" the very
-      next year. (Concretely: Salter &amp; Harris 1963 shows 1999=17, 2000=79, 2001=31 in an otherwise smooth
-      series — the raw definition reads that as a peak of 79 reached and half-life exhausted in a single year,
-      which the surrounding two decades of continued high citation do not support.) The default basis is
-      therefore a <strong>3-year centered moving average</strong>: each year's smoothed value is the mean of
-      itself and its immediate calendar neighbours (at the start/end of the series, whatever window is
-      available, rather than dropping those years). Peak and half-life are identified on this smoothed curve,
-      and the smoothed peak — not the raw one — is also the denominator for the sustained-rate sub-score below,
-      so both metrics rest on the same basis. You can switch the basis to raw (unsmoothed) or a 5-year average
-      above; <strong>the raw, unsmoothed half-life is always shown alongside the active basis on every
+      citation spike — can register as an inflated "peak." (Concretely: Salter &amp; Harris 1963 shows
+      1999=17, 2000=79, 2001=31 in an otherwise smooth series — reading 79 as the peak overstates it by roughly
+      3×, against neighbouring years averaging 24.) The default basis is therefore a <strong>3-year centered
+      moving average</strong>: each year's smoothed value is the mean of itself and its immediate calendar
+      neighbours (at the start/end of the series, whatever window is available, rather than dropping those
+      years). Peak and half-life are identified on this smoothed curve, and the smoothed peak — not the raw one
+      — is also the denominator for the sustained-rate sub-score below, so both metrics rest on the same basis.
+      You can switch the basis to raw (unsmoothed) or a 5-year average above; <strong>the raw, unsmoothed
+      half-life under the original single-year rule is always shown alongside the active basis on every
       scorecard</strong>, never hidden in favor of the smoothed one.</dd>
+
+    <dt>Sustained-decline requirement</dt>
+    <dd>Smoothing the series is not enough on its own. A single-year rule — "the first later year at or below
+      half the (smoothed) peak" — still gets fooled by ordinary noise: on a Monte Carlo simulation of a
+      genuinely <em>flat</em> citation rate (no real decline at all) under negative-binomial noise, which is a
+      better model of real citation-count overdispersion than Poisson, the single-year rule reported a spurious
+      half-life 71–89% of the time, largely independent of citation volume. Requiring the smoothed series to
+      stay at or below half its peak for several <em>consecutive</em> years — rather than dipping below it
+      once — cuts this substantially without giving up real-decline detection, which stayed ≥95% in every
+      condition tested. The table below summarizes the false-positive rate (flat series, no real decline) and
+      true-positive rate (a real 65% step decline after 10 years) at each sustain-years setting, N=4,000
+      simulated series per cell, 3-year centered moving average:
+      <div class="table-scroll">
+        <table>
+          <caption>False-positive rate on a flat (non-declining) series, by noise model and sustain-years setting. Sustain=1yr is the original single-year rule.</caption>
+          <thead><tr><th>Noise model</th><th>Peak/yr</th><th>1yr</th><th>2yr</th><th>3yr (default)</th><th>4yr</th></tr></thead>
+          <tbody>
+            <tr><th scope="row" rowspan="3">Poisson</th><td>2</td><td>81.5%</td><td>73.1%</td><td>64.1%</td><td>51.6%</td></tr>
+            <tr><td>15</td><td>11.2%</td><td>3.1%</td><td>1.0%</td><td>0.2%</td></tr>
+            <tr><td>60</td><td>0.0%</td><td>0.0%</td><td>0.0%</td><td>0.0%</td></tr>
+            <tr><th scope="row" rowspan="3">Neg. binomial, r=5</th><td>2</td><td>84.8%</td><td>78.6%</td><td>71.5%</td><td>61.7%</td></tr>
+            <tr><td>15</td><td>76.4%</td><td>61.5%</td><td>46.2%</td><td>29.6%</td></tr>
+            <tr><td>60</td><td>70.0%</td><td>52.7%</td><td>35.9%</td><td>21.2%</td></tr>
+            <tr><th scope="row" rowspan="3">Neg. binomial, r=2</th><td>2</td><td>86.6%</td><td>81.8%</td><td>75.6%</td><td>66.9%</td></tr>
+            <tr><td>15</td><td>85.5%</td><td>78.5%</td><td>69.3%</td><td>58.7%</td></tr>
+            <tr><td>60</td><td>84.9%</td><td>76.8%</td><td>67.7%</td><td>55.0%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <caption>True-positive rate on a genuinely declining series (10 years at peak, then 20 years at 35% of peak). Detection stays high throughout.</caption>
+          <thead><tr><th>Noise model</th><th>Peak/yr</th><th>1yr</th><th>2yr</th><th>3yr (default)</th><th>4yr</th></tr></thead>
+          <tbody>
+            <tr><th scope="row">Poisson</th><td>2</td><td>99.0%</td><td>98.8%</td><td>98.3%</td><td>97.8%</td></tr>
+            <tr><th scope="row">Neg. binomial, r=5</th><td>2</td><td>98.8%</td><td>98.4%</td><td>97.9%</td><td>97.3%</td></tr>
+            <tr><th scope="row">Neg. binomial, r=2</th><td>2</td><td>97.9%</td><td>97.1%</td><td>96.5%</td><td>95.7%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      Two things worth reading plainly from these tables. First, smoothing plus a sustained-decline requirement
+      helps a lot under low-noise (Poisson-like) conditions but only partially under the stronger, more
+      realistic overdispersion (negative binomial, r=2) — even 4 consecutive years still leaves false-positive
+      rates above 50% there, at every citation volume tested. Second, the cost in real-decline detection is
+      small and roughly uniform (a few percentage points) regardless of which sustain-years value is chosen.
+      Neither of these facts is hidden by the default: the reference single-year result is always shown
+      alongside, and this table is the honest picture of what "half-life reached" does and doesn't mean under
+      realistic noise.
+      <br><br>
+      Smoothing and the sustained-decline rule are complementary, not redundant: smoothing corrects a bad
+      <em>peak</em> (an inflated single year), while the sustained rule corrects a noisy <em>decline test</em>
+      against an otherwise-accurate peak. Neither fixes the other's failure mode — on Salter &amp; Harris
+      1963's raw, unsmoothed series, the inflated 2000 peak still reads as a 1-year half-life even at the
+      strictest 4-year sustained setting, because the years immediately after 2000 are genuinely, consecutively
+      below half of that inflated number. Only smoothing the peak itself resolves that case.</dd>
+
+    <dt>Volume gate</dt>
+    <dd>A third, independent guard: below a smoothed peak of 10 citations per year (on the
+      active smoothing basis), there is too little citation volume for smoothing or the sustained-decline rule
+      to meaningfully fix — both assume enough signal to average over. Below that floor, half-life is not
+      reported (shown as "not reported" rather than a number, on every basis in the peak/half-life table
+      independently) and the <strong>aging sub-score is dropped from the composite</strong>, which is then the
+      weighted mean of sustained rate and diffusion alone, renormalized over their two weights. This is shown
+      explicitly on the scorecard whenever it applies — never silently.</dd>
 
     <dt>Outlier detection</dt>
     <dd>Independent of which smoothing basis is active, every year with more than 6 raw citations is checked
@@ -246,11 +335,13 @@
     <dd>
       Sustained rate = mean annual citations over the last 5 complete years ÷ peak annual citations
       <em>on the active smoothing basis</em>, capped at 1.0.<br>
-      Aging = 1.0 if half-life (active basis) was never reached; otherwise min(half-life years ÷ half-life
-      reference, 1.0).<br>
+      Aging = 1.0 if half-life (active smoothing basis, active sustained-decline requirement) was never reached;
+      otherwise min(half-life years ÷ half-life reference, 1.0) — <strong>or dropped entirely if the volume gate
+      applies</strong> (see above), in which case the composite is the weighted mean of sustained rate and
+      diffusion only.<br>
       Diffusion = the selected measure above, as a 0–1 sub-score.<br>
-      Composite = 100 × weighted mean of the three (default weights 1/3 each). Bands: ≥70 Durable,
-      40–69 Moderately durable, &lt;40 Faded.
+      Composite = 100 × weighted mean of whichever sub-scores are present (default weights 1/3 each, renormalized
+      over the two remaining when aging is dropped). Bands: ≥70 Durable, 40–69 Moderately durable, &lt;40 Faded.
     </dd>
 
     <dt>Age gate</dt>

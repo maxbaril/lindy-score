@@ -16,6 +16,9 @@ const CONFIG = {
   SERIES_START_GAP_WARNING_YEARS: 5, // flag if the earliest citing work is later than pubYear + this
 
   SMOOTHING_WINDOW_DEFAULT: 3, // years; centered moving average window for peak/half-life. 1 = raw/unsmoothed.
+  SUSTAIN_YEARS_DEFAULT: 3,    // consecutive years <= half peak required before half-life is "reached". 1 = old single-year rule.
+  VOLUME_GATE_MIN_PEAK: 10,    // below this smoothed peak (citations/yr, active basis), half-life is withheld and
+                                // the aging sub-score is dropped from the composite rather than reported on thin signal
   OUTLIER_RATIO_THRESHOLD: 2.5, // flag a year if raw count exceeds this multiple of its immediate neighbours' mean
   OUTLIER_MIN_COUNT: 6,         // a year must exceed this raw count to be eligible for the ratio test at all —
                                  // otherwise old/obscure papers' sparse early tail (e.g. 1 vs 5 citations, a 5x
@@ -291,9 +294,22 @@ function peakOf(series) {
 
 /* =====================================================================
    METRIC 2 — CITATION HALF-LIFE
-   Years from the peak annual-citation year to the first later year
-   whose rate falls to <= half the peak. "Not reached" if it never does
-   within the visible series.
+   Years from the peak annual-citation year to the first later year that
+   begins a run of `sustainYears` consecutive years all at or below half the
+   peak. "Not reached" if no such run occurs within the visible series.
+
+   sustainYears=1 reproduces the original single-year rule exactly: "the
+   first later year at or below half the peak." That rule was replaced as
+   the default because Monte Carlo simulation under negative-binomial
+   citation noise (the overdispersion real citation counts show relative to
+   Poisson) found it flags a spurious half-life on a genuinely flat,
+   non-declining series 71-89% of the time, essentially regardless of
+   citation volume — a single noisy low year, not a real decline, is enough.
+   Requiring several consecutive years below the threshold cuts this
+   substantially (more under Poisson-like noise than under strong
+   overdispersion — see the methodology section for the full comparison)
+   while detecting genuine declines just as reliably (>=95% in the same
+   simulation, across every condition tested).
 
    Operates on whichever series is passed in — raw or a moving-average
    smoothed copy (see movingAverageSeries above) — so the caller controls
@@ -303,14 +319,22 @@ function peakOf(series) {
    see detectOutliers for the diagnostic that flags such years directly.
    ===================================================================== */
 
-function citationHalfLife(series, lastCompleteYear) {
+function citationHalfLife(series, lastCompleteYear, sustainYears = 1) {
   const peak = peakOf(series);
   if (!peak) {
     return { peakYear: null, peakValue: null, halfLifeYears: null, reached: false, hasPeakedAndDeclined: false };
   }
   const threshold = peak.count / 2;
   const later = series.filter(c => c.year > peak.year);
-  const hit = later.find(c => c.count <= threshold);
+
+  let hit = null;
+  for (let i = 0; i + sustainYears <= later.length; i++) {
+    const window = later.slice(i, i + sustainYears);
+    if (window.every(c => c.count <= threshold)) {
+      hit = window[0];
+      break;
+    }
+  }
 
   const hasPeakedAndDeclined =
     peak.year !== lastCompleteYear &&
@@ -492,13 +516,21 @@ function ageGatePasses(norm, halfLife, ageGateMinYears) {
   return { passes: true, reason: null };
 }
 
+/** Renormalizes over whichever sub-scores are non-null. Aging is the one that
+ *  can legitimately be null — dropped by the volume gate when there's too
+ *  little citation volume to trust a half-life reading — in which case the
+ *  composite is the weighted mean of sustained rate and diffusion alone. */
 function compositeScore(subScores, weights) {
-  const { sustained, aging, diffusion } = subScores;
-  if (sustained === null || aging === null || diffusion === null) return null;
-  const wSum = weights.sustained + weights.aging + weights.diffusion;
-  const composite =
-    100 * (sustained * weights.sustained + aging * weights.aging + diffusion * weights.diffusion) / wSum;
-  return composite;
+  const entries = [
+    [subScores.sustained, weights.sustained],
+    [subScores.aging, weights.aging],
+    [subScores.diffusion, weights.diffusion],
+  ].filter(([v]) => v !== null);
+  if (!entries.length) return null;
+  const wSum = entries.reduce((s, [, w]) => s + w, 0);
+  if (wSum <= 0) return null;
+  const weighted = entries.reduce((s, [v, w]) => s + v * w, 0);
+  return 100 * weighted / wSum;
 }
 
 function bandFor(composite) {
@@ -530,19 +562,28 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
   const norm = normalizeSeries(work, yearBreakdown);
   const persistence = citationPersistence(norm);
 
-  // Peak/half-life computed on three bases: raw (window=1) and two centered moving
-  // averages. Raw is kept and always shown alongside — see index.html — because a
-  // single indexing-artifact year can otherwise register as an inflated peak
-  // immediately followed by a false "decline." The active basis (settings.smoothingWindow,
-  // default 3) feeds the sustained-rate and aging sub-scores and the age gate; the
-  // others are display-only context.
+  // Peak/half-life computed on three smoothing bases (raw, 3-year, 5-year), each
+  // under the active sustained-decline requirement (settings.sustainYears, default 3
+  // consecutive years <= half peak; see citationHalfLife). Raw is kept and always
+  // shown alongside — see index.html — because a single indexing-artifact year can
+  // otherwise register as an inflated peak immediately followed by a false "decline."
+  // The active (smoothingWindow, sustainYears) combination feeds the sustained-rate
+  // and aging sub-scores and the age gate; the rest is display-only context.
   const smoothingWindows = [1, 3, 5];
+  const activeSustainYears = Number.isInteger(settings.sustainYears) && settings.sustainYears >= 1
+    ? settings.sustainYears
+    : CONFIG.SUSTAIN_YEARS_DEFAULT;
   const halfLifeByWindow = {};
   for (const w of smoothingWindows) {
-    halfLifeByWindow[w] = citationHalfLife(movingAverageSeries(norm.series, w), norm.lastCompleteYear);
+    halfLifeByWindow[w] = citationHalfLife(movingAverageSeries(norm.series, w), norm.lastCompleteYear, activeSustainYears);
   }
   const activeSmoothingWindow = smoothingWindows.includes(settings.smoothingWindow) ? settings.smoothingWindow : 1;
   const halfLife = halfLifeByWindow[activeSmoothingWindow];
+
+  // Fixed reference point, independent of the active sustainYears setting: the
+  // original single-year rule on the raw series, always available for comparison
+  // ("keep displaying the raw single-year result alongside, as now").
+  const halfLifeInstantaneousRaw = citationHalfLife(movingAverageSeries(norm.series, 1), norm.lastCompleteYear, 1);
 
   const outliers = detectOutliers(norm.series, CONFIG.OUTLIER_RATIO_THRESHOLD, CONFIG.OUTLIER_MIN_COUNT);
 
@@ -564,8 +605,15 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
   const activeDiffusion = settings.useMerge ? diffusionMerged : diffusionRaw;
   const diffusionSub = diffusionSubScore(activeDiffusion, settings.diffusionMeasure, settings.maxEffectiveFields);
 
+  // Volume gate: below this smoothed peak (active basis), there's too little citation
+  // volume to trust a half-life reading at all — smoothing and the sustained-decline
+  // rule both assume enough signal to average over, and neither fixes a series that's
+  // mostly noise to begin with. Half-life is withheld and aging is dropped from the
+  // composite (renormalized over sustained rate + diffusion) rather than reported thin.
+  const volumeGated = halfLife.peakValue !== null && halfLife.peakValue < CONFIG.VOLUME_GATE_MIN_PEAK;
+
   const sustainedSub = sustainedRateSubScore(persistence, halfLife);
-  const agingSub = agingSubScore(halfLife, settings.halfLifeReference);
+  const agingSub = volumeGated ? null : agingSubScore(halfLife, settings.halfLifeReference);
 
   const gate = ageGatePasses(norm, halfLife, settings.ageGateMinYears);
 
@@ -577,9 +625,12 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
     work,
     norm,
     persistence,
-    halfLife,             // active basis (settings.smoothingWindow)
-    halfLifeByWindow,      // { 1: raw, 3: ..., 5: ... } — always all three, for side-by-side display
+    halfLife,             // active basis (settings.smoothingWindow, settings.sustainYears)
+    halfLifeByWindow,      // { 1: raw, 3: ..., 5: ... } at the active sustainYears — always all three, for side-by-side display
+    halfLifeInstantaneousRaw, // fixed reference: raw series, original single-year rule, regardless of settings
     activeSmoothingWindow,
+    activeSustainYears,
+    volumeGated,
     outliers,
     homeSubfieldId,
     totalCitingWorks,
