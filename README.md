@@ -131,10 +131,12 @@ because of an update lag on that field. Both are displayed.
 
 ## Citation
 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21953675.svg)](https://doi.org/10.5281/zenodo.21953675)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21953674.svg)](https://doi.org/10.5281/zenodo.21953674)
 
-Baril, M. (2026). *lindy-score* (v1.0) [Computer software]. Zenodo.
-https://doi.org/10.5281/zenodo.21953675
+This DOI always resolves to the latest release.
+
+Baril, M. (2026). *lindy-score* [Computer software]. Zenodo.
+https://doi.org/10.5281/zenodo.21953674
 
 ## License
 
