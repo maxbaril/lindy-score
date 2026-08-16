@@ -17,8 +17,6 @@ const state = {
     diffusionMeasure: CONFIG.DIFFUSION_DEFAULT_MEASURE,
     smoothingWindow: CONFIG.SMOOTHING_WINDOW_DEFAULT, // 1 (raw) | 3 | 5 — basis for peak/half-life/sustained-rate
     sustainYears: CONFIG.SUSTAIN_YEARS_DEFAULT,       // consecutive years <= half peak required to call half-life "reached". 1 = old single-year rule.
-    useMerge: false,
-    mergeRules: CONFIG.DEFAULT_MERGE_RULES.map(r => ({ targetLabel: r.targetLabel, sourceNames: [...r.sourceNames] })),
     threshold: { enabled: false, minWorks: CONFIG.RARE_FIELD_MIN_WORKS, minPct: CONFIG.RARE_FIELD_MIN_PCT },
   },
   chartXAxisMode: 'calendar', // 'calendar' | 'sincePublication'
@@ -177,11 +175,9 @@ function wireSettingsPanel() {
   $(`#diffusion-measure-${state.settings.diffusionMeasure}`).checked = true;
   $(`#smoothing-window-${state.settings.smoothingWindow}`).checked = true;
   $(`#sustain-years-${state.settings.sustainYears}`).checked = true;
-  $('#merge-toggle').checked = state.settings.useMerge;
   $('#threshold-toggle').checked = state.settings.threshold.enabled;
   $('#threshold-min-works').value = state.settings.threshold.minWorks;
   $('#threshold-min-pct').value = state.settings.threshold.minPct;
-  renderMergeRulesEditor();
 
   const recalc = () => { renderAll(); };
 
@@ -199,41 +195,9 @@ function wireSettingsPanel() {
   document.querySelectorAll('input[name=sustain-years]').forEach(r => {
     r.addEventListener('change', e => { state.settings.sustainYears = parseInt(e.target.value, 10); recalc(); });
   });
-  $('#merge-toggle').addEventListener('change', e => { state.settings.useMerge = e.target.checked; recalc(); });
   $('#threshold-toggle').addEventListener('change', e => { state.settings.threshold.enabled = e.target.checked; recalc(); });
   $('#threshold-min-works').addEventListener('input', e => { state.settings.threshold.minWorks = parseFloat(e.target.value) || 0; recalc(); });
   $('#threshold-min-pct').addEventListener('input', e => { state.settings.threshold.minPct = parseFloat(e.target.value) || 0; recalc(); });
-  $('#reset-merge-rules').addEventListener('click', () => {
-    state.settings.mergeRules = CONFIG.DEFAULT_MERGE_RULES.map(r => ({ targetLabel: r.targetLabel, sourceNames: [...r.sourceNames] }));
-    renderMergeRulesEditor();
-    recalc();
-  });
-  $('#add-merge-rule').addEventListener('click', () => {
-    state.settings.mergeRules.push({ targetLabel: '', sourceNames: [] });
-    renderMergeRulesEditor();
-  });
-}
-
-function renderMergeRulesEditor() {
-  const container = $('#merge-rules-editor');
-  container.innerHTML = '';
-  state.settings.mergeRules.forEach((rule, i) => {
-    const targetInput = el('input', {
-      type: 'text', placeholder: 'Merged field label', value: rule.targetLabel,
-      'aria-label': `Merge rule ${i + 1} target label`,
-      oninput: e => { rule.targetLabel = e.target.value; renderAll(); },
-    });
-    const sourcesInput = el('input', {
-      type: 'text', placeholder: 'Source field names, comma-separated', value: rule.sourceNames.join(', '),
-      'aria-label': `Merge rule ${i + 1} source field names`,
-      oninput: e => { rule.sourceNames = e.target.value.split(',').map(s => s.trim()).filter(Boolean); renderAll(); },
-    });
-    const removeBtn = el('button', {
-      type: 'button', 'aria-label': `Remove merge rule ${i + 1}`, text: '✕',
-      onclick: () => { state.settings.mergeRules.splice(i, 1); renderMergeRulesEditor(); renderAll(); },
-    });
-    container.appendChild(el('div', { class: 'doi-row' }, [targetInput, sourcesInput, removeBtn]));
-  });
 }
 
 /* =====================================================================
@@ -322,7 +286,7 @@ function buildScorecard(paper, a, colorIndex) {
   const weightsNote = el('p', { class: 'weights-note', text:
     `Weights used: sustained ${fmt2(state.settings.weights.sustained)} · aging ${a.volumeGated ? 'dropped' : fmt2(state.settings.weights.aging)} · diffusion ${fmt2(state.settings.weights.diffusion)}` +
     (a.volumeGated ? ' (renormalized over the remaining two)' : '') + '. ' +
-    `Smoothing basis: ${windowLabel(a.activeSmoothingWindow)}, sustain ${a.activeSustainYears}yr. Field merge: ${state.settings.useMerge ? 'ON' : 'OFF'}. This score is a provisional heuristic, not a validated instrument, and excludes the two human-judgment dimensions below.`
+    `Smoothing basis: ${windowLabel(a.activeSmoothingWindow)}, sustain ${a.activeSustainYears}yr. This score is a provisional heuristic, not a validated instrument, and excludes the two human-judgment dimensions below.`
   });
 
   const metricsBlock = el('div', {}, [
@@ -605,8 +569,7 @@ function buildCsv(items) {
   lines.push(`# Smoothing basis used for peak/half-life/sustained-rate: ${state.settings.smoothingWindow}-year (1 = raw/unsmoothed); outlier flag threshold: ${CONFIG.OUTLIER_RATIO_THRESHOLD}x neighbour mean, minimum ${CONFIG.OUTLIER_MIN_COUNT} raw citations to be eligible`);
   lines.push(`# Sustained-decline requirement: half-life reached only after ${state.settings.sustainYears} consecutive year(s) <= half peak (1 = original single-year rule)`);
   lines.push(`# Volume gate: below smoothed peak ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr (active basis), half-life withheld and aging sub-score dropped from composite (renormalized)`);
-  lines.push(`# Field merge applied: ${state.settings.useMerge}`);
-  lines.push(`# Merge rules: ${JSON.stringify(state.settings.mergeRules)}`);
+  lines.push(`# Field merge (fixed, always applied): ${JSON.stringify(CONFIG.DEFAULT_MERGE_RULES)}`);
   lines.push(`# Rare-field threshold: enabled=${state.settings.threshold.enabled}, minWorks=${state.settings.threshold.minWorks}, minPct=${state.settings.threshold.minPct}`);
   lines.push('');
 

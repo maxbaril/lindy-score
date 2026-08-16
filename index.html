@@ -125,20 +125,6 @@
   </fieldset>
 
   <fieldset>
-    <legend>Field merging</legend>
-    <label><input type="checkbox" id="merge-toggle"> Apply field merge rules to the diffusion calculation (off by default; raw OpenAlex tags are shown either way)</label>
-    <div id="merge-rules-editor" style="margin-top:0.6rem;"></div>
-    <div class="export-row">
-      <button type="button" id="add-merge-rule">+ Add merge rule</button>
-      <button type="button" id="reset-merge-rules">Reset to default (Epidemiology + Surgery → Orthopedic Surgery)</button>
-    </div>
-    <p class="weights-note">OpenAlex's subfield tags are sometimes just wrong for this literature. Plenty of
-      orthopaedic papers get tagged "Epidemiology" instead of "Surgery," for example. Merge rules are your own
-      reclassification, not part of the source data, and the untouched raw tags are always shown alongside
-      them.</p>
-  </fieldset>
-
-  <fieldset>
     <legend>Rare-field noise threshold</legend>
     <label><input type="checkbox" id="threshold-toggle"> Exclude fields below a minimum size (off by default)</label>
     <div class="controls-grid" style="margin-top:0.5rem;">
@@ -343,10 +329,13 @@
       measures are already on a 0-to-1 scale.)</dd>
 
     <dt>Field merging</dt>
-    <dd>Off by default. When you turn it on, your own rules combine two or more raw OpenAlex subfield tags into
-      a single relabeled field, and diffusion gets recalculated from there. The raw and merged shares are always
-      shown side by side, never just the merged version, and your merge rules get written into the CSV export
-      too.</dd>
+    <dd>OpenAlex's subfield tags are sometimes just wrong for this literature. Plenty of orthopaedic papers get
+      tagged "Epidemiology" instead of "Surgery," for example. To correct for that, citing works tagged
+      Epidemiology or Surgery are always relabeled to "Orthopedic Surgery (reclassified)" before diffusion is
+      calculated. This isn't a setting you can turn off. It's a fixed correction for a known mistagging pattern,
+      not an experimental option, so the composite score is always built on the corrected field breakdown.
+      The raw, unmerged tags are still shown alongside on every scorecard so you can judge the reclassification
+      yourself, and both versions are written into the CSV export.</dd>
 
     <dt>Durability score</dt>
     <dd>

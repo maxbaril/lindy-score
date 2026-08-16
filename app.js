@@ -34,14 +34,13 @@ const CONFIG = {
   BAND_DURABLE: 70,
   BAND_MODERATE: 40,
 
-  // Default field-merge rule, OFF by default. Matched by OpenAlex subfield
-  // display name (case-insensitive) rather than id, so it stays editable
-  // from the UI without exposing raw ids to the user.
-  // Verified against the Salter & Harris (1963) validation case: raw Epidemiology
-  // (~46%) + raw Surgery (~25%) => ~72% merged, matching the manuscript's expected
-  // number for "orthopedic surgery" post-merge. Note OpenAlex's actual subfield
-  // display name is "Surgery", not "Orthopedic Surgery" — the merge output is
-  // deliberately re-labeled to make that reclassification visible, see index.html.
+  // Fixed field-merge rule, always applied (not user-configurable). Matched by
+  // OpenAlex subfield display name rather than id, since the id would mean nothing
+  // to a reader. Verified against the Salter & Harris (1963) validation case: raw
+  // Epidemiology (~46%) + raw Surgery (~25%) => ~72% merged, matching the manuscript's
+  // expected number for "orthopedic surgery" post-merge. Note OpenAlex's actual
+  // subfield display name is "Surgery", not "Orthopedic Surgery" - the merge output
+  // is deliberately re-labeled to make that reclassification visible, see index.html.
   DEFAULT_MERGE_RULES: [
     { targetLabel: 'Orthopedic Surgery (reclassified)', sourceNames: ['Epidemiology', 'Surgery'] },
   ],
@@ -353,9 +352,9 @@ function citationHalfLife(series, lastCompleteYear, sustainYears = 1) {
    METRIC 3 — CROSS-SPECIALTY DIFFUSION
    ===================================================================== */
 
-/** Apply user merge rules to raw per-subfield citing-work counts. Rules match by
- *  case-insensitive field display name, not subfield id, so they stay editable
- *  from the UI without exposing raw OpenAlex ids to the user. */
+/** Apply the fixed merge rules to raw per-subfield citing-work counts. Rules match by
+ *  case-insensitive field display name rather than subfield id, since the id would
+ *  mean nothing to a reader checking the logic. */
 function applyMergeRules(groups, mergeRules) {
   if (!mergeRules || !mergeRules.length) return groups.map(g => ({ ...g }));
 
@@ -596,14 +595,17 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
   const totalForShares = norm.citingWorksTotal;
 
   const rawFiltered = applyRareFieldThreshold(groups, totalForShares, settings.threshold);
-  const mergedGroups = applyMergeRules(groups, settings.mergeRules);
+  // The Epidemiology/Surgery -> Orthopedic Surgery correction (CONFIG.DEFAULT_MERGE_RULES) is
+  // always applied, not user-toggleable: it's a fixed correction for a known OpenAlex mistagging
+  // pattern in this literature, not an experimental option. Raw tags are still always shown
+  // alongside so readers can judge the reclassification for themselves.
+  const mergedGroups = applyMergeRules(groups, CONFIG.DEFAULT_MERGE_RULES);
   const mergedFiltered = applyRareFieldThreshold(mergedGroups, totalForShares, settings.threshold);
 
   const diffusionRaw = diffusionMeasures(rawFiltered, totalForShares, homeSubfieldId);
   const diffusionMerged = diffusionMeasures(mergedFiltered, totalForShares, homeSubfieldId);
 
-  const activeDiffusion = settings.useMerge ? diffusionMerged : diffusionRaw;
-  const diffusionSub = diffusionSubScore(activeDiffusion, settings.diffusionMeasure, settings.maxEffectiveFields);
+  const diffusionSub = diffusionSubScore(diffusionMerged, settings.diffusionMeasure, settings.maxEffectiveFields);
 
   // Volume gate: below this smoothed peak (active basis), there's too little citation
   // volume to trust a half-life reading at all — smoothing and the sustained-decline
@@ -636,7 +638,7 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
     totalCitingWorks,
     diffusionRaw,
     diffusionMerged,
-    activeDiffusionKey: settings.useMerge ? 'merged' : 'raw',
+    activeDiffusionKey: 'merged',
     subScores,
     composite,
     band,
