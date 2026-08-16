@@ -147,7 +147,7 @@ function renderDisambiguation() {
             renderDisambiguation();
             renderAll();
           },
-          text: `${w.display_name} — ${w.publication_year ?? '?'} — ${w.cited_by_count} citations${w.authorships?.[0]?.author?.display_name ? ' — ' + w.authorships[0].author.display_name + (w.authorships.length > 1 ? ' et al.' : '') : ''}`,
+          text: `${w.display_name} · ${w.publication_year ?? '?'} · ${w.cited_by_count} citations${w.authorships?.[0]?.author?.display_name ? ' · ' + w.authorships[0].author.display_name + (w.authorships.length > 1 ? ' et al.' : '') : ''}`,
         }),
       ]))
     );
@@ -272,25 +272,25 @@ function buildScorecard(paper, a, colorIndex) {
 
   const header = el('div', {}, [
     el('h3', { text: work.display_name }),
-    el('div', { class: 'paper-meta', text: `${work.publication_year} · ${norm.citingWorksTotal} citing works (cites: filter, ${norm.firstYearInApi}–${norm.lastCompleteYear}) · ${norm.storedCitedByCount} stored cited_by_count` }),
+    el('div', { class: 'paper-meta', text: `${work.publication_year} · ${norm.citingWorksTotal} citing works found (${norm.firstYearInApi}–${norm.lastCompleteYear}) · ${norm.storedCitedByCount} in OpenAlex's cached total` }),
   ]);
 
   const warnings = [];
   if (norm.totalsDiffer) {
     const diff = norm.citingWorksTotal - norm.storedCitedByCount;
-    warnings.push(`The live citing-works count (${norm.citingWorksTotal}) and the work object's stored cited_by_count (${norm.storedCitedByCount}) differ by ${Math.abs(diff)} (${diff > 0 ? 'filter has more' : 'filter has fewer'}). OpenAlex documents that cited_by_count is refreshed on a lag relative to the live index, so this is an update-lag discrepancy, not an error — every calculation on this card uses the live citing-works total.`);
+    warnings.push(`The live count of citing works (${norm.citingWorksTotal}) and OpenAlex's own cached total (${norm.storedCitedByCount}) differ by ${Math.abs(diff)}, with the ${diff > 0 ? 'live count higher' : 'live count lower'}. OpenAlex refreshes these two figures on different schedules, so this is a normal lag rather than an error. Every calculation on this card uses the live count.`);
   }
   if (norm.unexpectedStart) {
-    warnings.push(`The earliest citing work found is from ${norm.firstYearInApi}, ${norm.gapYears} years after this paper's ${norm.publicationYear} publication date. That's a wider gap than expected for a genuinely slow-to-be-cited paper — worth checking whether this reflects an indexing gap rather than a real citation pattern.`);
+    warnings.push(`The earliest citing work found is from ${norm.firstYearInApi}, ${norm.gapYears} years after this paper's ${norm.publicationYear} publication date. That's a wider gap than expected for a genuinely slow-to-be-cited paper, so it's worth checking whether this reflects an indexing gap rather than a real citation pattern.`);
   }
   if (norm.unknownYearCount > 0) {
-    warnings.push(`${norm.unknownYearCount} citing work(s) have no recorded publication year in OpenAlex and are excluded from the annual series and persistence/half-life calculations (they are still counted in the citing-works total above).`);
+    warnings.push(`${norm.unknownYearCount} citing work(s) have no recorded publication year in OpenAlex, so they're left out of the annual series and the persistence/half-life calculations. They're still counted in the citing-works total above.`);
   }
   if (persistence.yearsAvailableInWindow < 5) {
     warnings.push(`Only ${persistence.yearsAvailableInWindow} of the last 5 complete years are present in the returned series.`);
   }
   if (a.volumeGated) {
-    warnings.push(`Volume gate: the active basis's smoothed peak (${fmt1(a.halfLife.peakValue)}/yr) is below ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr — too little citation volume for smoothing or the sustained-decline rule to fix. Half-life is not reported and the aging sub-score is dropped from the composite below, renormalized over sustained rate and diffusion only.`);
+    warnings.push(`Volume gate: the active basis's smoothed peak (${fmt1(a.halfLife.peakValue)}/yr) is below ${CONFIG.VOLUME_GATE_MIN_PEAK}/yr, too little citation volume for smoothing or the sustained-decline rule to fix. Half-life isn't reported, and the aging sub-score is dropped from the composite below and renormalized over sustained rate and diffusion only.`);
   }
 
   let scoreBlock;
@@ -389,7 +389,7 @@ function buildHalfLifeTable(a) {
     }),
   ];
   const table = el('table', {}, [
-    el('caption', { text: `Peak and half-life under each smoothing basis, at the active sustained-decline requirement (${a.activeSustainYears} consecutive year${a.activeSustainYears === 1 ? '' : 's'}). The active row feeds the sustained-rate and aging sub-scores; the reference row is the original single-year rule, always shown regardless of settings.` }),
+    el('caption', { text: `Peak and half-life under each smoothing basis, with the active sustained-decline requirement (${a.activeSustainYears} consecutive year${a.activeSustainYears === 1 ? '' : 's'}). The active row feeds the sustained-rate and aging sub-scores. The reference row is the original single-year rule, always shown regardless of settings.` }),
     el('thead', {}, el('tr', {}, [el('th', { text: 'Basis' }), el('th', { text: 'Peak (yr / value)' }), el('th', { text: 'Half-life' })])),
     el('tbody', {}, rows.map(r => el('tr', {}, r.map((c, i) => el(i === 0 ? 'th' : 'td', { scope: i === 0 ? 'row' : undefined, text: String(c) }))))),
   ]);
@@ -397,9 +397,9 @@ function buildHalfLifeTable(a) {
 }
 
 function buildOutlierNote(a) {
-  if (!a.outliers.length) return el('p', { class: 'weights-note', text: 'No single-year outliers detected (raw count > 2.5× the mean of its immediate neighbouring years).' });
-  const desc = a.outliers.map(o => `${o.year} (${o.count}, vs. neighbours averaging ${fmt1(o.neighboursMean)} — ${o.ratio === Infinity ? '∞' : fmt1(o.ratio)}×)`).join('; ');
-  return el('div', { class: 'warning-box', text: `Possible indexing artifact: ${desc}. Raw peak/half-life above may be distorted by this; the smoothed bases are less sensitive to it.` });
+  if (!a.outliers.length) return el('p', { class: 'weights-note', text: 'No single-year outliers detected (raw count more than 2.5 times the average of its immediate neighbouring years).' });
+  const desc = a.outliers.map(o => `${o.year} (${o.count}, vs. neighbours averaging ${fmt1(o.neighboursMean)}, ${o.ratio === Infinity ? '∞' : fmt1(o.ratio)}x)`).join('; ');
+  return el('div', { class: 'warning-box', text: `Possible indexing artifact: ${desc}. The raw peak and half-life above may be distorted by this. The smoothed bases are less sensitive to it.` });
 }
 
 function buildDiffusionTable(a) {
@@ -413,7 +413,7 @@ function buildDiffusionTable(a) {
     ['Rao-Stirling (home-anchored)', fmt2(raw.raoStirling), fmt2(merged.raoStirling)],
   ];
   const table = el('table', {}, [
-    el('caption', { text: `Diffusion measures — raw tags vs. merged. Active for scoring: ${a.activeDiffusionKey}.` }),
+    el('caption', { text: `Diffusion measures, raw tags vs. merged. Active for scoring: ${a.activeDiffusionKey}.` }),
     el('thead', {}, el('tr', {}, [el('th', { text: 'Measure' }), el('th', { text: 'Raw' }), el('th', { text: 'Merged' })])),
     el('tbody', {}, rows.map(r => el('tr', {}, r.map((c, i) => el(i === 0 ? 'th' : 'td', { scope: i === 0 ? 'row' : undefined, text: String(c) }))))),
   ]);
@@ -424,7 +424,7 @@ function buildDiffusionTable(a) {
   return el('div', {}, [
     el('h4', { text: 'Cross-specialty diffusion' }),
     el('div', { class: 'table-scroll' }, table),
-    el('p', { class: 'weights-note', text: 'Field shares below are percentages of TOTAL citations to this work, not of tagged citing works — they will not sum to 100%.' }),
+    el('p', { class: 'weights-note', text: 'Field shares below are percentages of total citations to this work, not of tagged citing works, so they will not add up to 100%.' }),
     el('div', { class: 'table-scroll' }, [el('strong', { text: 'Raw tag shares (top 5): ' }), el('span', { text: topFieldsRaw })]),
     el('div', { class: 'table-scroll' }, [el('strong', { text: 'Merged shares (top 5): ' }), el('span', { text: topFieldsMerged })]),
   ]);
@@ -455,9 +455,9 @@ function renderComparisonTable(items) {
   container.innerHTML = '';
   if (items.length < 1) return;
 
-  const cols = ['Paper', 'Year', 'Citing works (cites: filter)', 'Stored cited_by_count', 'Last-5yr sum', 'Still rising?', `Peak (yr/val, ${windowLabel(state.settings.smoothingWindow)})`, `Half-life (sustain ${state.settings.sustainYears}yr)`, 'Composite', 'Band'];
+  const cols = ['Paper', 'Year', 'Citing works found', 'OpenAlex cached total', 'Last-5yr sum', 'Still rising?', `Peak (yr/val, ${windowLabel(state.settings.smoothingWindow)})`, `Half-life (sustain ${state.settings.sustainYears}yr)`, 'Composite', 'Band'];
   const table = el('table', {}, [
-    el('caption', { text: 'Comparison across loaded papers, under current settings. Peak/half-life use the active smoothing basis and sustained-decline requirement — see each scorecard for the full breakdown.' }),
+    el('caption', { text: 'Comparison across loaded papers, under current settings. Peak and half-life use the active smoothing basis and sustained-decline requirement; see each scorecard for the full breakdown.' }),
     el('thead', {}, el('tr', {}, cols.map(c => el('th', { text: c })))),
     el('tbody', {}, items.map(({ paper, analysis: a }, i) => el('tr', {}, [
       el('th', { scope: 'row', text: a.work.display_name.slice(0, 40) + (a.work.display_name.length > 40 ? '…' : '') }),

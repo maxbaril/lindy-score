@@ -13,15 +13,16 @@
 <header>
   <h1>Lindy Durability Scorecard</h1>
   <p class="subtitle">
-    Citation counts measure attention, not lasting value. This tool computes three bibliometric proxies for
-    durability — sustained citation rate, citation half-life, and cross-specialty diffusion — from
-    <a href="https://openalex.org">OpenAlex</a> data, and leaves two further dimensions (educational reuse,
-    expert-validated relevance) as explicit human-judgment fields, excluded from the score.
+    Citation counts measure attention, not lasting value. This tool scores three bibliometric proxies for
+    durability (sustained citation rate, citation half-life, and cross-specialty diffusion) using data from
+    <a href="https://openalex.org">OpenAlex</a>. Two more dimensions, educational reuse and expert-validated
+    relevance, need a human judgment call, so they're left as free-text fields and kept out of the score.
   </p>
   <div class="disclaimer-banner">
-    The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>. It omits
-    the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet peaked
-    and declined, are deliberately not scored — see <a href="#methodology">how this is computed</a>.
+    The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>, and it
+    omits the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet
+    peaked and declined, are deliberately left unscored. See <a href="#methodology">how this is computed</a>
+    for why.
   </div>
 </header>
 
@@ -38,13 +39,14 @@
     <div id="status-area" class="status-msg" aria-live="polite"></div>
     <div id="disambiguation-area"></div>
   </form>
-  <p class="weights-note">Accepts a DOI (with or without the <code>https://doi.org/</code> prefix) or, for
-  pre-DOI works, a title to search OpenAlex for.</p>
+  <p class="weights-note">Type a DOI (the <code>https://doi.org/</code> part is optional) or, for papers old
+  enough to predate DOIs, just the title. We'll search OpenAlex for it.</p>
 </section>
 
 <section aria-labelledby="settings-heading">
   <h2 id="settings-heading">Scoring settings</h2>
-  <p class="weights-note">Everything here recomputes instantly against already-fetched data — no need to re-fetch to try different assumptions.</p>
+  <p class="weights-note">Everything below recalculates instantly from data already fetched, so you can try
+  different assumptions without re-fetching anything.</p>
 
   <fieldset>
     <legend>Composite score constants</legend>
@@ -59,7 +61,7 @@
         <input type="number" id="max-effective-fields" min="1" step="0.5">
       </div>
     </div>
-    <p class="controls-subhead">Weights (need not sum to 1 — normalized at compute time)</p>
+    <p class="controls-subhead">Weights (don't need to add up to 1, they're normalized automatically)</p>
     <div class="controls-grid controls-grid-3">
       <div class="control">
         <label for="weight-sustained">Sustained rate</label>
@@ -74,9 +76,10 @@
         <input type="number" id="weight-diffusion" min="0" max="1" step="0.05">
       </div>
     </div>
-    <p class="weights-note">Composite = 100 × weighted mean of the three 0–1 sub-scores. "Max effective fields" is
-      the divisor for diffusion sub-scores derived from a field count (richness, effective-fields) — see
-      <a href="#methodology">how this is computed</a>.</p>
+    <p class="weights-note">The composite score is 100 times the weighted average of the three sub-scores below,
+      each on a 0-to-1 scale. "Max effective fields" is what field-count-based diffusion sub-scores (richness,
+      effective fields) get divided by. See <a href="#methodology">how this is computed</a> for the full
+      picture.</p>
   </fieldset>
 
   <fieldset>
@@ -96,11 +99,11 @@
       <label><input type="radio" name="smoothing-window" id="smoothing-window-3" value="3"> 3-year centered moving average (default)</label>
       <label><input type="radio" name="smoothing-window" id="smoothing-window-5" value="5"> 5-year centered moving average</label>
     </div>
-    <p class="weights-note">A single unusually high year (an indexing artifact, not a real citation spike) can
-      register as an inflated peak immediately followed by a false "decline" in the raw series. Smoothing feeds
-      both the half-life calculation and the sustained-rate sub-score's denominator so they rest on the same
-      basis. The raw, unsmoothed half-life is always shown alongside the active basis on every scorecard — see
-      also the outlier flags below each chart, which name the specific years driving this.</p>
+    <p class="weights-note">A single unusually high year, often just an indexing quirk rather than a real
+      citation spike, can look like an inflated peak followed by a false "decline" in the raw series. Smoothing
+      feeds both the half-life calculation and the sustained-rate sub-score, so they're built on the same basis.
+      The raw, unsmoothed half-life is always shown next to the active basis on every scorecard, and the
+      outlier flags on each scorecard name the specific years causing trouble.</p>
   </fieldset>
 
   <fieldset>
@@ -112,24 +115,27 @@
       <label><input type="radio" name="sustain-years" id="sustain-years-4" value="4"> 4 consecutive years</label>
     </div>
     <p class="weights-note">Half-life is "reached" at the first later year that begins a run of this many
-      consecutive years all at or below half the (smoothed) peak, rather than any single year dipping below it
-      once. Monte Carlo simulation under negative-binomial citation noise found the single-year rule flags a
-      spurious half-life on a genuinely flat, non-declining series roughly 71–89% of the time; requiring several
-      consecutive years reduces this substantially without materially reducing detection of real declines
-      (&gt;=95% in the same simulation across every condition tested) — see
-      <a href="#methodology">how this is computed</a> for the full comparison. The original single-year result on
-      the raw series is always shown for reference regardless of this setting.</p>
+      consecutive years, all at or below half the smoothed peak, rather than any single year dipping below it
+      just once. A Monte Carlo simulation under negative-binomial citation noise found that the single-year
+      rule flags a spurious half-life on a genuinely flat, non-declining series roughly 71 to 89% of the time.
+      Requiring several consecutive years cuts that substantially without giving up much detection of real
+      declines (95% or better in the same simulation, across every condition tested). See
+      <a href="#methodology">how this is computed</a> for the full comparison. The original single-year result
+      on the raw series is always shown for reference, regardless of this setting.</p>
   </fieldset>
 
   <fieldset>
     <legend>Field merging</legend>
-    <label><input type="checkbox" id="merge-toggle"> Apply field merge rules to the diffusion calculation (off by default — raw OpenAlex tags are shown either way)</label>
+    <label><input type="checkbox" id="merge-toggle"> Apply field merge rules to the diffusion calculation (off by default; raw OpenAlex tags are shown either way)</label>
     <div id="merge-rules-editor" style="margin-top:0.6rem;"></div>
     <div class="export-row">
       <button type="button" id="add-merge-rule">+ Add merge rule</button>
       <button type="button" id="reset-merge-rules">Reset to default (Epidemiology + Surgery → Orthopedic Surgery)</button>
     </div>
-    <p class="weights-note">OpenAlex subfield tags are sometimes substantively wrong for this literature — e.g. many orthopaedic papers get tagged "Epidemiology" rather than "Surgery." Merge rules are a user reclassification, not source data, and are always shown alongside the untouched raw tags.</p>
+    <p class="weights-note">OpenAlex's subfield tags are sometimes just wrong for this literature. Plenty of
+      orthopaedic papers get tagged "Epidemiology" instead of "Surgery," for example. Merge rules are your own
+      reclassification, not part of the source data, and the untouched raw tags are always shown alongside
+      them.</p>
   </fieldset>
 
   <fieldset>
@@ -145,7 +151,10 @@
         <input type="number" id="threshold-min-pct" min="0" step="0.1">
       </div>
     </div>
-    <p class="weights-note">A field must fail <em>both</em> the citing-works and the percent test to survive the join — i.e. it's dropped if it's under the works threshold OR under the percent threshold. Richness and the entropy-based measures are far more sensitive to this than the top-share measure; compare the scorecard's raw/merged diffusion table with the toggle on and off.</p>
+    <p class="weights-note">A field survives only if it clears <em>both</em> the minimum citing-works count and
+      the minimum percentage. Fall short on either one and it's dropped. Richness and the entropy-based measures
+      are far more sensitive to this than the top-share measure, so it's worth comparing a scorecard's
+      raw/merged diffusion table with the toggle on and off.</p>
   </fieldset>
 </section>
 
@@ -186,65 +195,68 @@
   <h2 id="methodology-heading">How this is computed, and what it cannot tell you</h2>
   <dl>
     <dt>Data source</dt>
-    <dd>OpenAlex REST API, no authentication, queried live in your browser. The annual citation series is built
-      from <code>works?filter=cites:{id}&amp;group_by=publication_year</code> — every citing work grouped by its
-      own publication year. This is the same query OpenAlex's own web interface uses for its Year facet, and it
-      returns complete history with no truncation. Field breakdown comes from the analogous
-      <code>works?filter=cites:{id}&amp;group_by=primary_topic.subfield.id</code>. Both group_by calls request the
-      maximum 200 groups per page; a citation-year span or field count exceeding 200 is flagged defensively,
-      though no real paper approaches that. Citing works with no recorded publication year are reported
-      separately and excluded from the annual series, not silently dropped.</dd>
+    <dd>Everything comes from the OpenAlex API, queried live in your browser, no login required. The annual
+      citation series comes from every work that cites the paper, grouped by its own publication year: the
+      same approach OpenAlex's own website uses for its "Year" chart. That gives the complete citation history
+      with no cutoff. Field breakdown works the same way, grouped by subfield instead of year.
+      <br><br>
+      For anyone checking the numbers: the underlying queries are
+      <code>works?filter=cites:{id}&amp;group_by=publication_year</code> and the equivalent with
+      <code>group_by=primary_topic.subfield.id</code>, both requesting the maximum 200 groups per page. No real
+      paper comes close to that limit, but it's flagged anyway just in case. Citing works with no recorded
+      publication year are counted and shown separately rather than silently dropped.</dd>
 
     <dt>Two citation totals, shown side by side</dt>
-    <dd>This tool deliberately avoids the Work object's precomputed <code>counts_by_year</code> field: it's a
-      periodically-refreshed shortcut capped at roughly the last decade, which is why an earlier version of this
-      tool showed a truncated series and a suspiciously recent "peak year" for older papers. Instead, every
-      annual count and the total citing-works figure are derived directly from the <code>cites:</code> filter
-      above. That live total can differ slightly from the Work object's own cached <code>cited_by_count</code> —
-      OpenAlex documents that the two are refreshed on different schedules — so both are shown on each scorecard
-      rather than treating either as the "wrong" one. All calculations here use the live <code>cites:</code>
-      filter total.</dd>
+    <dd>OpenAlex also offers a shortcut field with citations pre-counted by year, but it only covers roughly the
+      last decade. An earlier version of this tool used it, which quietly truncated older papers' history and
+      made their "peak year" look suspiciously recent. Every count here now comes from counting citing works
+      directly instead. That live count can end up slightly different from the total OpenAlex has cached on the
+      paper's own record, since the two are simply refreshed on different schedules. Rather than pick a winner,
+      both numbers are shown on the scorecard. Every calculation on this page uses the live, directly-counted
+      total.</dd>
 
     <dt>Series-start check</dt>
-    <dd>The tool checks that the earliest citing work is reasonably close to the paper's own publication year
-      (within 5 years) and flags it on the scorecard if not — this can indicate
-      an indexing gap rather than a genuinely slow-to-be-cited paper. Since the series is now the complete
-      history rather than a capped recent window, this is a plausibility check, not a truncation warning.</dd>
+    <dd>If the earliest citing work found is more than five years after the paper's own publication date, the
+      scorecard flags it. That's usually a sign of a gap in OpenAlex's indexing, rather than a paper that
+      genuinely took years to get its first citation. Since the series is now complete history rather than a
+      limited recent window, this is just a sanity check, not a warning about missing data.</dd>
 
     <dt>Citation persistence</dt>
-    <dd>Sum of citations over the last five complete calendar years (the current, still-in-progress year is
-      excluded). "Still rising" means the most recent complete year is at or above every other year in the
-      returned series.</dd>
+    <dd>The sum of citations over the last five complete calendar years; the current year, still in progress, is
+      left out. "Still rising" means the most recent complete year is at least as high as every other year in
+      the series.</dd>
 
     <dt>Citation half-life</dt>
-    <dd>Years from the peak annual-citation year to the first later year that begins a run of several
-      consecutive years all at or below half the peak value (see "sustained-decline requirement" below). If no
-      such run ever occurs, this is reported as "not reached after N years" rather than assigning an arbitrary
+    <dd>Count how many years pass between the peak citation year and the first later year where the rate drops
+      to half the peak or lower (see "sustained-decline requirement" below for what "drops" actually requires).
+      If that never happens, the tool says so plainly, "not reached after N years," rather than making up a
       number.
       <br><br>
-      <strong>Smoothing basis.</strong> A single unusually high year — an indexing artifact rather than a real
-      citation spike — can register as an inflated "peak." (Concretely: Salter &amp; Harris 1963 shows
-      1999=17, 2000=79, 2001=31 in an otherwise smooth series — reading 79 as the peak overstates it by roughly
-      3×, against neighbouring years averaging 24.) The default basis is therefore a <strong>3-year centered
-      moving average</strong>: each year's smoothed value is the mean of itself and its immediate calendar
-      neighbours (at the start/end of the series, whatever window is available, rather than dropping those
-      years). Peak and half-life are identified on this smoothed curve, and the smoothed peak — not the raw one
-      — is also the denominator for the sustained-rate sub-score below, so both metrics rest on the same basis.
-      You can switch the basis to raw (unsmoothed) or a 5-year average above; <strong>the raw, unsmoothed
-      half-life under the original single-year rule is always shown alongside the active basis on every
-      scorecard</strong>, never hidden in favor of the smoothed one.</dd>
+      A single unusually high year, often an indexing quirk rather than a real spike in attention, can throw
+      this off badly. Salter and Harris's 1963 paper, for example, shows 17 citations in 1999, 79 in 2000, and
+      31 in 2001. Treating 79 as the real peak overstates it roughly threefold against the neighbouring years'
+      24-citation average. So by default, peak and half-life are worked out on a <strong>3-year centered moving
+      average</strong> instead of the raw numbers: each year's smoothed value is the average of itself and its
+      immediate neighbours, using whatever years are available at the start or end of the series rather than
+      dropping them. The smoothed peak, not the raw one, is also what the sustained-rate sub-score below is
+      divided by, so both metrics are built on the same footing. You can switch to raw numbers or a 5-year
+      average using the setting above, but <strong>the original single-year result on the raw series is always
+      shown next to whichever basis is active</strong>. It's never hidden.</dd>
 
     <dt>Sustained-decline requirement</dt>
-    <dd>Smoothing the series is not enough on its own. A single-year rule — "the first later year at or below
-      half the (smoothed) peak" — still gets fooled by ordinary noise: on a Monte Carlo simulation of a
-      genuinely <em>flat</em> citation rate (no real decline at all) under negative-binomial noise, which is a
-      better model of real citation-count overdispersion than Poisson, the single-year rule reported a spurious
-      half-life 71–89% of the time, largely independent of citation volume. Requiring the smoothed series to
-      stay at or below half its peak for several <em>consecutive</em> years — rather than dipping below it
-      once — cuts this substantially without giving up real-decline detection, which stayed ≥95% in every
-      condition tested. The table below summarizes the false-positive rate (flat series, no real decline) and
-      true-positive rate (a real 65% step decline after 10 years) at each sustain-years setting, N=4,000
-      simulated series per cell, 3-year centered moving average:
+    <dd>Smoothing alone isn't enough. A rule that fires the moment a single year dips below half the smoothed
+      peak still gets fooled by ordinary noise. We tested this with a Monte Carlo simulation: take a citation
+      rate that's genuinely flat, with no real decline at all, add negative-binomial noise (a more realistic
+      stand-in for how overdispersed real citation counts are than plain Poisson noise), and see how often the
+      single-year rule falsely calls a decline anyway. The answer: 71 to 89% of the time, more or less
+      regardless of how many citations the paper gets per year.
+      <br><br>
+      Requiring the smoothed series to stay below half its peak for several years in a row, instead of just
+      dipping below it once, cuts that false-positive rate substantially without giving up much ability to
+      catch real declines (95% or better in every condition tested). The table below shows the false-positive
+      rate on a flat series with no real decline, and the true-positive rate on a series with a real 65% drop
+      after ten years, at each sustain-years setting. Each cell comes from 4,000 simulated series, using the
+      3-year moving average:
       <div class="table-scroll">
         <table>
           <caption>False-positive rate on a flat (non-declining) series, by noise model and sustain-years setting. Sustain=1yr is the original single-year rule.</caption>
@@ -273,95 +285,103 @@
           </tbody>
         </table>
       </div>
-      Two things worth reading plainly from these tables. First, smoothing plus a sustained-decline requirement
-      helps a lot under low-noise (Poisson-like) conditions but only partially under the stronger, more
-      realistic overdispersion (negative binomial, r=2) — even 4 consecutive years still leaves false-positive
-      rates above 50% there, at every citation volume tested. Second, the cost in real-decline detection is
-      small and roughly uniform (a few percentage points) regardless of which sustain-years value is chosen.
-      Neither of these facts is hidden by the default: the reference single-year result is always shown
-      alongside, and this table is the honest picture of what "half-life reached" does and doesn't mean under
-      realistic noise.
+      Two things stand out in these numbers. Under low-noise, Poisson-like conditions, smoothing plus the
+      sustained-decline requirement works well. Under the more realistic, heavier overdispersion (negative
+      binomial, r=2), it only helps partway: even four years in a row still leaves the false-positive rate above
+      50%, no matter how many citations a paper gets per year. On the other hand, the cost to catching real
+      declines is small and stays roughly the same, a few percentage points, whichever sustain-years setting
+      you pick. Neither of these is hidden behind the default: the single-year reference result is always shown
+      too, and this table is meant to be an honest picture of what "half-life reached" actually means under
+      realistic noise, not a rosier one.
       <br><br>
-      Smoothing and the sustained-decline rule are complementary, not redundant: smoothing corrects a bad
-      <em>peak</em> (an inflated single year), while the sustained rule corrects a noisy <em>decline test</em>
-      against an otherwise-accurate peak. Neither fixes the other's failure mode — on Salter &amp; Harris
-      1963's raw, unsmoothed series, the inflated 2000 peak still reads as a 1-year half-life even at the
-      strictest 4-year sustained setting, because the years immediately after 2000 are genuinely, consecutively
-      below half of that inflated number. Only smoothing the peak itself resolves that case.</dd>
+      Smoothing and the sustained-decline rule fix two different problems, not the same one twice. Smoothing
+      corrects a bad <em>peak</em>, an inflated single year. The sustained rule corrects a noisy
+      <em>decline test</em> running against an otherwise-accurate peak. Fixing one doesn't fix the other: on
+      Salter and Harris's raw, unsmoothed series, the inflated year-2000 peak still produces a 1-year half-life
+      even under the strictest 4-year sustained setting, because the years right after 2000 genuinely do stay
+      below half of that inflated number for four years running. Only smoothing the peak itself resolves that
+      particular case.</dd>
 
     <dt>Volume gate</dt>
-    <dd>A third, independent guard: below a smoothed peak of 10 citations per year (on the
-      active smoothing basis), there is too little citation volume for smoothing or the sustained-decline rule
-      to meaningfully fix — both assume enough signal to average over. Below that floor, half-life is not
-      reported (shown as "not reported" rather than a number, on every basis in the peak/half-life table
-      independently) and the <strong>aging sub-score is dropped from the composite</strong>, which is then the
-      weighted mean of sustained rate and diffusion alone, renormalized over their two weights. This is shown
-      explicitly on the scorecard whenever it applies — never silently.</dd>
+    <dd>A third guard, independent of the other two: if the smoothed peak comes in under 10 citations per year,
+      there simply isn't enough signal for smoothing or the sustained-decline rule to work with. Both of those
+      assume there's a real trend to average over. Below that floor, half-life isn't reported at all (each row
+      of the peak/half-life table says so directly, rather than showing a number), and the
+      <strong>aging sub-score is dropped from the composite</strong> entirely. The composite then becomes the
+      weighted average of sustained rate and diffusion only, with those two weights renormalized to fill the
+      gap. The scorecard always states plainly when this applies. It's never applied quietly.</dd>
 
     <dt>Outlier detection</dt>
-    <dd>Independent of which smoothing basis is active, every year with more than 6 raw citations is checked
-      against its own immediate neighbours: it's flagged as a possible indexing artifact if its raw count
-      exceeds 2.5× the mean of the year before and the year after (edge years, with only one neighbour, aren't
-      checked). The 6-citation floor exists because an old or obscure paper's sparse early history is mostly
-      single digits, where a jump from 1 citation to 5 clears the same 2.5× ratio as 79 against a peer group of
-      24 — real in relative terms, meaningless in absolute ones — and would otherwise bury a genuine artifact
-      under a wall of trivial flags. This is a diagnostic shown alongside the half-life table, not a silent data
-      correction — flagged years are not removed or altered anywhere in the underlying series or the CSV
-      export.</dd>
+    <dd>Separately from whichever smoothing basis is active, every year with more than 6 citations gets checked
+      against its immediate neighbours. If its count is more than 2.5 times the average of the year before and
+      the year after, it gets flagged as a possible indexing artifact. (Years right at the start or end of the
+      series, with only one neighbour, aren't checked this way.) The 6-citation floor matters because an old or
+      obscure paper's early history is often just single digits, and a jump from 1 citation to 5 clears that
+      same 2.5x ratio just as easily as 79 does against a neighbourhood averaging 24, even though one is a real
+      anomaly and the other is just noise. Without the floor, a wall of trivial flags would bury the genuine
+      ones. This is only a diagnostic shown next to the half-life table. Flagged years aren't removed or
+      changed anywhere, including in the CSV export.</dd>
 
-    <dt>Cross-specialty diffusion — denominator</dt>
-    <dd>Displayed field shares and the "1 − top share" measure use the <strong>live citing-works total</strong>
-      (the same <code>cites:</code> filter total described above) as the denominator, per spec — they will not
-      sum to 100% since some citing works are untagged. The entropy-based measures (effective number of fields,
-      its normalized form) and the Rao-Stirling measure instead renormalize shares among <em>tagged</em> citing
-      works only, because <code>exp(Shannon entropy)</code> is only a meaningful "effective category count" over
-      a distribution that sums to 1. This denominator split is a deliberate, documented choice — see the CSV
-      export for both the raw counts and every derived share.</dd>
+    <dt>What diffusion shares are counted against</dt>
+    <dd>The field shares shown, and the "1 minus top share" measure, are calculated against the
+      <strong>live citing-works total</strong> described above. That means they won't add up to 100%, since some
+      citing works don't have a field tag at all. The entropy-based measures (effective number of fields and its
+      normalized version) and the Rao-Stirling measure work differently: they only count tagged citing works,
+      because treating "effective number of fields" as a meaningful figure only makes sense if the shares add up
+      to 1 in the first place. That's a deliberate choice, and the CSV export includes both the raw counts and
+      every share calculated from them, so you can check the math either way.</dd>
 
     <dt>Diffusion measures</dt>
-    <dd>Four are computed and shown for every paper: (a) 1 − largest field's share, (b) field richness (raw
-      distinct-field count), (c) effective number of fields = exp(Shannon entropy), plus its normalized form
-      H / ln(S), and (d) a Rao-Stirling-style distance-weighted diversity anchored at the paper's own primary
-      subfield, where citing fields sharing a parent field score distance 0.33, sharing only a domain score
-      0.66, and otherwise score 1.0. One measure — selectable above, default (c) — feeds the composite as
-      min(measure / max-effective-fields, 1.0), except (a) and (d) which are already 0–1.</dd>
+    <dd>Four measures get computed and shown for every paper: how much of the total the largest field takes up
+      (inverted, so a higher number means the citing literature is more spread out), the raw number of distinct
+      fields citing the paper, the effective number of fields (a Shannon-entropy-based figure that works like
+      richness but downweights fields with only a handful of citations), and a Rao-Stirling-style diversity
+      score that weights each citing field by how conceptually distant it is from the paper's own field, using
+      the OpenAlex subject hierarchy: 0.33 for a shared parent field, 0.66 for only a shared domain, 1.0
+      otherwise. One of these four, selectable above and defaulting to effective number of fields, feeds into
+      the composite score, divided by "max effective fields" and capped at 1.0. (The top-share and Rao-Stirling
+      measures are already on a 0-to-1 scale.)</dd>
 
     <dt>Field merging</dt>
-    <dd>Off by default. When enabled, user-defined rules combine two or more raw OpenAlex subfield tags into
-      one relabeled field before diffusion is recomputed. Raw and merged shares are always shown side by side,
-      never merged alone, and the rules are written into the CSV export.</dd>
+    <dd>Off by default. When you turn it on, your own rules combine two or more raw OpenAlex subfield tags into
+      a single relabeled field, and diffusion gets recalculated from there. The raw and merged shares are always
+      shown side by side, never just the merged version, and your merge rules get written into the CSV export
+      too.</dd>
 
     <dt>Durability score</dt>
     <dd>
-      Sustained rate = mean annual citations over the last 5 complete years ÷ peak annual citations
-      <em>on the active smoothing basis</em>, capped at 1.0.<br>
-      Aging = 1.0 if half-life (active smoothing basis, active sustained-decline requirement) was never reached;
-      otherwise min(half-life years ÷ half-life reference, 1.0) — <strong>or dropped entirely if the volume gate
-      applies</strong> (see above), in which case the composite is the weighted mean of sustained rate and
-      diffusion only.<br>
-      Diffusion = the selected measure above, as a 0–1 sub-score.<br>
-      Composite = 100 × weighted mean of whichever sub-scores are present (default weights 1/3 each, renormalized
-      over the two remaining when aging is dropped). Bands: ≥70 Durable, 40–69 Moderately durable, &lt;40 Faded.
+      Sustained rate is the average annual citations over the last 5 complete years, divided by the peak
+      annual citations on the active smoothing basis, capped at 1.0.<br>
+      Aging is 1.0 if half-life was never reached (on the active smoothing basis and sustained-decline
+      requirement), or half-life divided by the half-life reference otherwise, capped at 1.0.
+      <strong>Unless the volume gate applies</strong>, in which case aging is dropped entirely and the composite
+      becomes the weighted average of just the other two.<br>
+      Diffusion is whichever measure you selected above, already on a 0-to-1 scale.<br>
+      The composite score is 100 times the weighted average of whichever sub-scores are present. The default
+      weights are equal thirds, renormalized over the remaining two when aging gets dropped. 70 or above is
+      Durable, 40 to 69 is Moderately durable, below 40 is Faded.
     </dd>
 
     <dt>Age gate</dt>
-    <dd>Overrides the bands. If the paper is under 10 years old, or its annual series (on the active smoothing
-      basis) has not yet peaked and declined, no score is shown — the tool reports "Too recent to judge" and
-      displays the components as provisional context. This is deliberate: scoring a paper with no established
-      citation trajectory yet is the overclaim this project argues against.</dd>
+    <dd>This overrides everything above. If a paper is under 10 years old, or its citation series (on the active
+      smoothing basis) hasn't yet peaked and started declining, no score gets shown at all. Instead, the tool
+      reports "Too recent to judge" and displays the components as background information only. That's on
+      purpose: putting a number on a paper with no established citation history yet is exactly the kind of
+      overclaim this project is arguing against.</dd>
 
     <dt>What this cannot tell you</dt>
-    <dd>Whether a paper is <em>correct</em>, whether it's still clinically relevant, or whether practitioners
-      actually still teach from it. Those are the two human-judgment fields on each scorecard, entered by you,
-      never computed, and never included in the composite.</dd>
+    <dd>Whether a paper is actually <em>correct</em>, still clinically relevant, or something practitioners
+      still teach from. Those questions are the two human-judgment fields on each scorecard. You fill them in
+      yourself; the tool never computes them and never folds them into the composite.</dd>
   </dl>
 </section>
 
 </main>
 
 <footer>
-  <p>Data via the <a href="https://openalex.org">OpenAlex</a> API. No data leaves your browser except requests
-  to OpenAlex; nothing is stored server-side because there is no server.</p>
+  <p>Data comes from the <a href="https://openalex.org">OpenAlex</a> API. Nothing you enter leaves your browser
+  except the requests sent to OpenAlex, and nothing is stored anywhere else, because there's no server to store
+  it on.</p>
 </footer>
 
 <script src="subfields-data.js"></script>
