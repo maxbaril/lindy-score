@@ -4,10 +4,6 @@
    CONFIG — all tunable constants live here. Also exposed as UI controls.
    ===================================================================== */
 const CONFIG = {
-  // Polite pool: OpenAlex asks for a mailto so slow/heavy users can be
-  // reached before being rate-limited, and get routed to faster servers.
-  // Replace with your own address if you fork this.
-  OPENALEX_MAILTO: 'maximebar@outlook.com',
   OPENALEX_BASE: 'https://api.openalex.org',
 
   HALF_LIFE_REFERENCE: 20,     // years; aging sub-score = min(halfLife/REF, 1.0)
@@ -61,14 +57,8 @@ class OpenAlexError extends Error {
   }
 }
 
-function politeParams(params) {
-  const p = new URLSearchParams(params);
-  p.set('mailto', CONFIG.OPENALEX_MAILTO);
-  return p;
-}
-
 async function openAlexFetch(path, params) {
-  const url = `${CONFIG.OPENALEX_BASE}${path}?${politeParams(params).toString()}`;
+  const url = `${CONFIG.OPENALEX_BASE}${path}?${new URLSearchParams(params).toString()}`;
   let res;
   try {
     res = await fetch(url);
