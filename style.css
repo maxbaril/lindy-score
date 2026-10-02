@@ -75,7 +75,7 @@ h2 {
 h3 { font-size: 1.1rem; font-weight: 600; font-family: inherit; }
 h4 { font-size: 0.95rem; margin: 1.1rem 0 0.4rem; }
 
-.subtitle { color: var(--text-muted); margin-top: 0; max-width: 62ch; font-size: 1.02rem; }
+.subtitle { color: var(--text-muted); margin-top: 0; font-size: 1.02rem; }
 
 .disclaimer-banner {
   background: var(--panel);

@@ -19,7 +19,7 @@
     relevance, need a human judgment call, so they're left as free-text fields and kept out of the score.
   </p>
   <div class="disclaimer-banner">
-    The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>, and it
+    The composite score below is a <strong>heuristic</strong>, and it
     omits the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet
     peaked and declined, don't get an official score, just a provisional read instead. See
     <a href="#methodology">how this is computed</a> for why.
@@ -111,11 +111,9 @@
     </div>
     <p class="weights-note">Half-life is "reached" at the first later year that begins a run of this many
       consecutive years, all at or below half the smoothed peak, rather than any single year dipping below it
-      just once. A Monte Carlo simulation under negative-binomial citation noise found that the single-year
-      rule flags a spurious half-life on a genuinely flat, non-declining series roughly 71 to 89% of the time.
-      Requiring several consecutive years cuts that substantially without giving up much detection of real
-      declines (95% or better in the same simulation, across every condition tested). See
-      <a href="#methodology">how this is computed</a> for the full comparison.</p>
+      just once. A single dip is easy to trigger by chance; requiring several years in a row makes that much
+      less likely without costing much ability to catch real declines. See
+      <a href="#methodology">how this is computed</a> for the simulation behind this.</p>
   </fieldset>
 
   <fieldset>
