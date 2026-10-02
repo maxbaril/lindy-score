@@ -613,6 +613,12 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
   const composite = gate.passes ? compositeScore(subScores, settings.weights) : null;
   const band = gate.passes ? bandFor(composite) : null;
 
+  // Computed the same way as `composite`, but never gated: this is what the formula would
+  // say on a paper that hasn't earned a verdict yet. It is deliberately a separate field from
+  // `composite`/`band` (never a Durable/Moderately durable/Faded band) and is surfaced only
+  // behind an explicit, per-paper opt-in in the UI — see the "provisional signal" toggle.
+  const provisionalComposite = compositeScore(subScores, settings.weights);
+
   return {
     work,
     norm,
@@ -632,6 +638,7 @@ function computeAnalysis(work, groups, totalCitingWorks, yearBreakdown, settings
     subScores,
     composite,
     band,
+    provisionalComposite,
     gate,
   };
 }

@@ -45,7 +45,7 @@ function el(tag, attrs = {}, children = []) {
 function addPaperRow(prefill = '') {
   if (state.papers.length >= MAX_PAPERS) return;
   const uid = state.nextUid++;
-  state.papers.push({ uid, doiInput: prefill, work: null, groups: null, totalCitingWorks: null, yearBreakdown: null, error: null, judgment: { reuse: '', relevance: '' } });
+  state.papers.push({ uid, doiInput: prefill, work: null, groups: null, totalCitingWorks: null, yearBreakdown: null, error: null, showProvisional: false, judgment: { reuse: '', relevance: '' } });
   renderDoiRows();
 }
 
@@ -215,6 +215,32 @@ function fmt2(x) { return x === null || x === undefined ? '—' : x.toFixed(2); 
 function fmt0(x) { return x === null || x === undefined ? '—' : Math.round(x).toString(); }
 function fmt1(x) { return x === null || x === undefined ? '—' : x.toFixed(1); }
 
+function describeLevel(x, labels) {
+  if (x === null || x === undefined) return null;
+  if (x >= 0.66) return labels[2];
+  if (x >= 0.33) return labels[1];
+  return labels[0];
+}
+
+/** Turns the three sub-scores into a plain-English sentence for a paper that's too young
+ *  to score. Gives a reader something more useful than three bare numbers, without implying
+ *  a verdict: no combined number here, just a description of what's happened so far. */
+function buildProvisionalGloss(a) {
+  const { subScores, halfLife, volumeGated } = a;
+  const sustainedWord = describeLevel(subScores.sustained, ['weak', 'moderate', 'strong']);
+  const diffusionWord = describeLevel(subScores.diffusion, ['narrow', 'moderate', 'wide']);
+  const agingPhrase = volumeGated
+    ? 'too few citations yet to judge aging'
+    : halfLife.reached
+      ? `already down to half its peak rate, about ${halfLife.halfLifeYears} year${halfLife.halfLifeYears === 1 ? '' : 's'} after peaking`
+      : 'no decline from its peak yet';
+  const bits = [];
+  if (sustainedWord) bits.push(`${sustainedWord} sustained citation rate`);
+  bits.push(agingPhrase);
+  if (diffusionWord) bits.push(`${diffusionWord} spread across fields`);
+  return `So far: ${bits.join(', ')}.`;
+}
+
 function bandClass(band) {
   if (band === 'Durable') return 'band-durable';
   if (band === 'Moderately durable') return 'band-moderate';
@@ -262,12 +288,28 @@ function buildScorecard(paper, a, colorIndex) {
     const reasonText = gate.reason === 'too_young'
       ? `This paper is under ${state.settings.ageGateMinYears} years old.`
       : `This paper's annual citation series has not yet peaked and declined.`;
+
+    const provisionalToggle = el('button', {
+      type: 'button',
+      style: 'margin-top:0.4rem;',
+      text: paper.showProvisional ? 'Hide provisional signal' : 'Show provisional signal (not a durability verdict)',
+      onclick: () => { paper.showProvisional = !paper.showProvisional; renderAll(); },
+    });
+
+    const provisionalBlock = paper.showProvisional ? el('div', { class: 'warning-box' }, [
+      el('strong', { text: `Provisional signal: ${fmt0(a.provisionalComposite)}/100. ` }),
+      `This is not a durability verdict, there's no band, and it isn't one of Durable, Moderately durable, or Faded. It's today's three components combined with the same formula used for papers old enough to score, run on a paper that hasn't had time to show a real trajectory yet. Expect it to move, possibly a lot, as more citation history comes in. Treat it as a rough early read, not a prediction.`,
+    ]) : null;
+
     scoreBlock = el('div', {}, [
       el('div', { class: 'composite-row' }, [
         el('span', { class: 'band-badge band-gated', text: 'Too recent to judge' }),
       ]),
       el('p', { class: 'weights-note', text: `${reasonText} Scoring a paper with no established citation trajectory is exactly the overclaim this tool is designed to avoid. Components below are shown as provisional context only.` }),
-    ]);
+      el('p', { class: 'weights-note', text: buildProvisionalGloss(a) }),
+      provisionalToggle,
+      provisionalBlock,
+    ].filter(Boolean));
   } else {
     scoreBlock = el('div', {}, [
       el('div', { class: 'composite-row' }, [
@@ -586,14 +628,15 @@ function buildCsv(items) {
   });
   lines.push('');
 
-  lines.push('paper,persistence_sum_last5,still_rising,active_smoothing_window,active_sustain_years,peak_year,peak_value,volume_gated,half_life_years,half_life_reached,sustained_subscore,aging_subscore,diffusion_subscore,composite,band,gate_passes,gate_reason');
+  lines.push('# provisional_composite is computed the same way as composite but ignores the age gate; it is NOT a durability verdict and has no band, see README/methodology');
+  lines.push('paper,persistence_sum_last5,still_rising,active_smoothing_window,active_sustain_years,peak_year,peak_value,volume_gated,half_life_years,half_life_reached,sustained_subscore,aging_subscore,diffusion_subscore,composite,band,provisional_composite,gate_passes,gate_reason');
   items.forEach(({ analysis: a }) => {
     lines.push([
       a.work.display_name, a.persistence.sum, a.persistence.stillRising, a.activeSmoothingWindow, a.activeSustainYears,
       a.halfLife.peakYear, a.halfLife.peakValue, a.volumeGated,
       a.volumeGated ? null : a.halfLife.halfLifeYears, a.volumeGated ? null : a.halfLife.reached,
       a.subScores.sustained, a.subScores.aging, a.subScores.diffusion,
-      a.composite, a.band, a.gate.passes, a.gate.reason,
+      a.composite, a.band, a.provisionalComposite, a.gate.passes, a.gate.reason,
     ].map(csvEscape).join(','));
   });
   lines.push('');
