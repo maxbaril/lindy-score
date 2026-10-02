@@ -21,7 +21,7 @@
   <div class="disclaimer-banner">
     The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>, and it
     omits the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet
-    peaked and declined, don't get an official score, just a clearly-labeled provisional read instead. See
+    peaked and declined, don't get an official score, just a provisional read instead. See
     <a href="#methodology">how this is computed</a> for why.
   </div>
 </header>
@@ -39,14 +39,11 @@
     <div id="status-area" class="status-msg" aria-live="polite"></div>
     <div id="disambiguation-area"></div>
   </form>
-  <p class="weights-note">Type a DOI (the <code>https://doi.org/</code> part is optional) or, for papers old
-  enough to predate DOIs, just the title. We'll search OpenAlex for it.</p>
+  <p class="weights-note">Type a DOI (the <code>https://doi.org/</code> part is optional) or the title.</p>
 </section>
 
 <section aria-labelledby="settings-heading">
   <h2 id="settings-heading">Scoring settings</h2>
-  <p class="weights-note">Everything below recalculates instantly from data already fetched, so you can try
-  different assumptions without re-fetching anything.</p>
 
   <fieldset>
     <legend>Composite score constants</legend>
@@ -77,9 +74,7 @@
       </div>
     </div>
     <p class="weights-note">The composite score is 100 times the weighted average of the three sub-scores below,
-      each on a 0-to-1 scale. "Max effective fields" is what field-count-based diffusion sub-scores (richness,
-      effective fields) get divided by. See <a href="#methodology">how this is computed</a> for the full
-      picture.</p>
+      each on a 0-to-1 scale. See <a href="#methodology">how this is computed</a> for the full picture.</p>
   </fieldset>
 
   <fieldset>
@@ -109,7 +104,7 @@
   <fieldset>
     <legend>Sustained-decline requirement for half-life</legend>
     <div class="radio-group" role="radiogroup" aria-label="Consecutive years required at or below half peak">
-      <label><input type="radio" name="sustain-years" id="sustain-years-1" value="1"> 1 year (original single-year rule)</label>
+      <label><input type="radio" name="sustain-years" id="sustain-years-1" value="1"> 1 year</label>
       <label><input type="radio" name="sustain-years" id="sustain-years-2" value="2"> 2 consecutive years</label>
       <label><input type="radio" name="sustain-years" id="sustain-years-3" value="3"> 3 consecutive years (default)</label>
       <label><input type="radio" name="sustain-years" id="sustain-years-4" value="4"> 4 consecutive years</label>
@@ -120,8 +115,7 @@
       rule flags a spurious half-life on a genuinely flat, non-declining series roughly 71 to 89% of the time.
       Requiring several consecutive years cuts that substantially without giving up much detection of real
       declines (95% or better in the same simulation, across every condition tested). See
-      <a href="#methodology">how this is computed</a> for the full comparison. The original single-year result
-      on the raw series is always shown for reference, regardless of this setting.</p>
+      <a href="#methodology">how this is computed</a> for the full comparison.</p>
   </fieldset>
 
   <fieldset>
@@ -178,19 +172,20 @@
 </section>
 
 <section id="methodology" class="methodology" aria-labelledby="methodology-heading">
-  <h2 id="methodology-heading">How this is computed, and what it cannot tell you</h2>
+  <h2 id="methodology-heading">How this is computed</h2>
   <dl>
     <dt>Data source</dt>
     <dd>Everything comes from the OpenAlex API, queried live in your browser, no login required. The annual
-      citation series comes from every work that cites the paper, grouped by its own publication year: the
-      same approach OpenAlex's own website uses for its "Year" chart. That gives the complete citation history
-      with no cutoff. Field breakdown works the same way, grouped by subfield instead of year.
+      citation series comes from every work that cites the paper, grouped by its own publication year, the
+      same approach OpenAlex's own website uses for its "Year" chart, which gives the complete citation history
+      with no cutoff. Field breakdown works the same way, grouped by subfield instead of year. (For anyone
+      checking the numbers: <code>works?filter=cites:{id}&amp;group_by=publication_year</code> and the
+      equivalent with <code>group_by=primary_topic.subfield.id</code>.)
       <br><br>
-      For anyone checking the numbers: the underlying queries are
-      <code>works?filter=cites:{id}&amp;group_by=publication_year</code> and the equivalent with
-      <code>group_by=primary_topic.subfield.id</code>, both requesting the maximum 200 groups per page. No real
-      paper comes close to that limit, but it's flagged anyway just in case. Citing works with no recorded
-      publication year are counted and shown separately rather than silently dropped.</dd>
+      Two sanity checks run quietly in the background. If a citing work has no recorded publication year, it's
+      counted in the total but shown separately rather than silently dropped. And if the earliest citing work
+      found is more than five years after the paper's own publication date, the scorecard flags it, usually a
+      sign of a gap in OpenAlex's indexing rather than a paper that genuinely took years to get noticed.</dd>
 
     <dt>Two citation totals, shown side by side</dt>
     <dd>OpenAlex also offers a shortcut field with citations pre-counted by year, but it only covers roughly the
@@ -198,14 +193,8 @@
       made their "peak year" look suspiciously recent. Every count here now comes from counting citing works
       directly instead. That live count can end up slightly different from the total OpenAlex has cached on the
       paper's own record, since the two are simply refreshed on different schedules. Rather than pick a winner,
-      both numbers are shown on the scorecard. Every calculation on this page uses the live, directly-counted
+      both numbers are shown on the scorecard, and every calculation here uses the live, directly-counted
       total.</dd>
-
-    <dt>Series-start check</dt>
-    <dd>If the earliest citing work found is more than five years after the paper's own publication date, the
-      scorecard flags it. That's usually a sign of a gap in OpenAlex's indexing, rather than a paper that
-      genuinely took years to get its first citation. Since the series is now complete history rather than a
-      limited recent window, this is just a sanity check, not a warning about missing data.</dd>
 
     <dt>Citation persistence</dt>
     <dd>The sum of citations over the last five complete calendar years; the current year, still in progress, is
@@ -308,15 +297,6 @@
       ones. This is only a diagnostic shown next to the half-life table. Flagged years aren't removed or
       changed anywhere, including in the CSV export.</dd>
 
-    <dt>What diffusion shares are counted against</dt>
-    <dd>The field shares shown, and the "1 minus top share" measure, are calculated against the
-      <strong>live citing-works total</strong> described above. That means they won't add up to 100%, since some
-      citing works don't have a field tag at all. The entropy-based measures (effective number of fields and its
-      normalized version) and the Rao-Stirling measure work differently: they only count tagged citing works,
-      because treating "effective number of fields" as a meaningful figure only makes sense if the shares add up
-      to 1 in the first place. That's a deliberate choice, and the CSV export includes both the raw counts and
-      every share calculated from them, so you can check the math either way.</dd>
-
     <dt>Diffusion measures</dt>
     <dd>Four measures get computed and shown for every paper: how much of the total the largest field takes up
       (inverted, so a higher number means the citing literature is more spread out), the raw number of distinct
@@ -325,13 +305,20 @@
       score that weights each citing field by how conceptually distant it is from the paper's own field, using
       the OpenAlex subject hierarchy: 0.33 for a shared parent field, 0.66 for only a shared domain, 1.0
       otherwise. One of these four, selectable above and defaulting to effective number of fields, feeds into
-      the composite score, divided by "max effective fields" and capped at 1.0. (The top-share and Rao-Stirling
-      measures are already on a 0-to-1 scale.)</dd>
+      the composite score.
+      <br><br>
+      The field shares shown, and the top-share measure, are calculated against the total citing-works count, so
+      they won't add up to 100% since some citing works have no field tag at all. The entropy-based measures and
+      Rao-Stirling instead count only tagged citing works, since "effective number of fields" is only meaningful
+      once the shares add up to 1. The CSV export includes both the raw counts and every share calculated from
+      them.</dd>
 
     <dt>Field merging</dt>
-    <dd>OpenAlex sometimes tags orthopaedic citing works as "Epidemiology" instead of "Surgery." The tool always
-      relabels these to "Orthopedic Surgery (reclassified)" before calculating diffusion; this isn't a toggle.
-      Raw, unmerged tags are still shown on every scorecard and in the CSV export for comparison.</dd>
+    <dd>Citing-field tags aren't always reliable. OpenAlex specifically tends to mislabel surgical citing
+      literature in this field as "Epidemiology" rather than "Surgery," so the tool corrects that one known
+      pattern before calculating diffusion. It isn't a general stance on what counts as epidemiology, just a
+      fix for a tagging quirk in this particular literature, and raw, uncorrected tags are always shown
+      alongside for comparison.</dd>
 
     <dt>Durability score</dt>
     <dd>
@@ -351,8 +338,8 @@
     <dd>Overrides everything above. Papers under 10 years old, or whose citation series hasn't yet peaked and
       declined, don't get an official composite or band. Instead the scorecard shows "Too recent to judge," a
       plain-English read of the three components so far, and a provisional number computed the same way as the
-      real composite but without the age gate applied. The provisional number is clearly labeled as an early
-      estimate, not a verdict, and can move a lot as more citation history comes in.</dd>
+      real composite but without the age gate applied. It's an early estimate, not a verdict, and can move a
+      lot as more citation history comes in.</dd>
 
     <dt>What this cannot tell you</dt>
     <dd>Whether a paper is actually <em>correct</em>, still clinically relevant, or something practitioners
