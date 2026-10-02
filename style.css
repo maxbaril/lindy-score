@@ -209,6 +209,16 @@ thead th { background: var(--panel); }
 }
 .warning-box::before { content: "⚠ "; }
 
+.provisional-callout {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--link);
+  border-radius: 4px;
+  padding: 0.7rem 0.9rem;
+  font-size: 0.95rem;
+  margin: 0.6rem 0;
+}
+
 .judgment-fields { display: grid; gap: 0.5rem; margin-top: 0.6rem; }
 .judgment-fields label { font-size: 0.85rem; color: var(--text-muted); }
 .judgment-fields textarea {

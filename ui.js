@@ -45,7 +45,7 @@ function el(tag, attrs = {}, children = []) {
 function addPaperRow(prefill = '') {
   if (state.papers.length >= MAX_PAPERS) return;
   const uid = state.nextUid++;
-  state.papers.push({ uid, doiInput: prefill, work: null, groups: null, totalCitingWorks: null, yearBreakdown: null, error: null, showProvisional: false, judgment: { reuse: '', relevance: '' } });
+  state.papers.push({ uid, doiInput: prefill, work: null, groups: null, totalCitingWorks: null, yearBreakdown: null, error: null, judgment: { reuse: '', relevance: '' } });
   renderDoiRows();
 }
 
@@ -213,6 +213,7 @@ function analyzedPapers() {
 function fmtPct(x) { return x === null || x === undefined ? '—' : `${(100 * x).toFixed(1)}%`; }
 function fmt2(x) { return x === null || x === undefined ? '—' : x.toFixed(2); }
 function fmt0(x) { return x === null || x === undefined ? '—' : Math.round(x).toString(); }
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 function fmt1(x) { return x === null || x === undefined ? '—' : x.toFixed(1); }
 
 function describeLevel(x, labels) {
@@ -225,6 +226,9 @@ function describeLevel(x, labels) {
 /** Turns the three sub-scores into a plain-English sentence for a paper that's too young
  *  to score. Gives a reader something more useful than three bare numbers, without implying
  *  a verdict: no combined number here, just a description of what's happened so far. */
+/** Returns a lowercase, comma-joined fragment like "strong sustained citation rate so
+ *  far, no decline from its peak yet, narrow spread across fields" — meant to be dropped
+ *  into a sentence, not read standalone. */
 function buildProvisionalGloss(a) {
   const { subScores, halfLife, volumeGated } = a;
   const sustainedWord = describeLevel(subScores.sustained, ['weak', 'moderate', 'strong']);
@@ -235,10 +239,10 @@ function buildProvisionalGloss(a) {
       ? `already down to half its peak rate, about ${halfLife.halfLifeYears} year${halfLife.halfLifeYears === 1 ? '' : 's'} after peaking`
       : 'no decline from its peak yet';
   const bits = [];
-  if (sustainedWord) bits.push(`${sustainedWord} sustained citation rate`);
+  if (sustainedWord) bits.push(`${sustainedWord} sustained citation rate so far`);
   bits.push(agingPhrase);
   if (diffusionWord) bits.push(`${diffusionWord} spread across fields`);
-  return `So far: ${bits.join(', ')}.`;
+  return bits.join(', ');
 }
 
 function bandClass(band) {
@@ -286,30 +290,21 @@ function buildScorecard(paper, a, colorIndex) {
   let scoreBlock;
   if (!gate.passes) {
     const reasonText = gate.reason === 'too_young'
-      ? `This paper is under ${state.settings.ageGateMinYears} years old.`
-      : `This paper's annual citation series has not yet peaked and declined.`;
+      ? `under ${state.settings.ageGateMinYears} years old`
+      : `hasn't peaked and declined yet`;
 
-    const provisionalToggle = el('button', {
-      type: 'button',
-      style: 'margin-top:0.4rem;',
-      text: paper.showProvisional ? 'Hide provisional signal' : 'Show provisional signal (not a durability verdict)',
-      onclick: () => { paper.showProvisional = !paper.showProvisional; renderAll(); },
-    });
-
-    const provisionalBlock = paper.showProvisional ? el('div', { class: 'warning-box' }, [
-      el('strong', { text: `Provisional signal: ${fmt0(a.provisionalComposite)}/100. ` }),
-      `This is not a durability verdict, there's no band, and it isn't one of Durable, Moderately durable, or Faded. It's today's three components combined with the same formula used for papers old enough to score, run on a paper that hasn't had time to show a real trajectory yet. Expect it to move, possibly a lot, as more citation history comes in. Treat it as a rough early read, not a prediction.`,
-    ]) : null;
+    const provisionalBlock = el('div', { class: 'provisional-callout' }, [
+      el('strong', { text: `Provisional read: ${fmt0(a.provisionalComposite)}/100. ` }),
+      `${capitalize(buildProvisionalGloss(a))}. This is an early estimate, not a durability verdict, and will likely shift as more citation history comes in.`,
+    ]);
 
     scoreBlock = el('div', {}, [
       el('div', { class: 'composite-row' }, [
         el('span', { class: 'band-badge band-gated', text: 'Too recent to judge' }),
       ]),
-      el('p', { class: 'weights-note', text: `${reasonText} Scoring a paper with no established citation trajectory is exactly the overclaim this tool is designed to avoid. Components below are shown as provisional context only.` }),
-      el('p', { class: 'weights-note', text: buildProvisionalGloss(a) }),
-      provisionalToggle,
+      el('p', { class: 'weights-note', text: `No official score: this paper is ${reasonText}.` }),
       provisionalBlock,
-    ].filter(Boolean));
+    ]);
   } else {
     scoreBlock = el('div', {}, [
       el('div', { class: 'composite-row' }, [

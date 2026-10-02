@@ -21,8 +21,8 @@
   <div class="disclaimer-banner">
     The composite score below is a <strong>provisional heuristic, not a validated instrument</strong>, and it
     omits the two human-judgment dimensions. Papers under 10 years old, or whose citation series hasn't yet
-    peaked and declined, are deliberately left unscored. See <a href="#methodology">how this is computed</a>
-    for why.
+    peaked and declined, don't get an official score, just a clearly-labeled provisional read instead. See
+    <a href="#methodology">how this is computed</a> for why.
   </div>
 </header>
 
@@ -295,7 +295,7 @@
       of the peak/half-life table says so directly, rather than showing a number), and the
       <strong>aging sub-score is dropped from the composite</strong> entirely. The composite then becomes the
       weighted average of sustained rate and diffusion only, with those two weights renormalized to fill the
-      gap. The scorecard always states plainly when this applies. It's never applied quietly.</dd>
+      gap. The scorecard always states plainly when this applies.</dd>
 
     <dt>Outlier detection</dt>
     <dd>Separately from whichever smoothing basis is active, every year with more than 6 citations gets checked
@@ -329,13 +329,9 @@
       measures are already on a 0-to-1 scale.)</dd>
 
     <dt>Field merging</dt>
-    <dd>OpenAlex's subfield tags are sometimes just wrong for this literature. Plenty of orthopaedic papers get
-      tagged "Epidemiology" instead of "Surgery," for example. To correct for that, citing works tagged
-      Epidemiology or Surgery are always relabeled to "Orthopedic Surgery (reclassified)" before diffusion is
-      calculated. This isn't a setting you can turn off. It's a fixed correction for a known mistagging pattern,
-      not an experimental option, so the composite score is always built on the corrected field breakdown.
-      The raw, unmerged tags are still shown alongside on every scorecard so you can judge the reclassification
-      yourself, and both versions are written into the CSV export.</dd>
+    <dd>OpenAlex sometimes tags orthopaedic citing works as "Epidemiology" instead of "Surgery." The tool always
+      relabels these to "Orthopedic Surgery (reclassified)" before calculating diffusion; this isn't a toggle.
+      Raw, unmerged tags are still shown on every scorecard and in the CSV export for comparison.</dd>
 
     <dt>Durability score</dt>
     <dd>
@@ -352,22 +348,11 @@
     </dd>
 
     <dt>Age gate</dt>
-    <dd>This overrides everything above. If a paper is under 10 years old, or its citation series (on the active
-      smoothing basis) hasn't yet peaked and started declining, no score gets shown at all. Instead, the tool
-      reports "Too recent to judge" and displays the components as background information only. That's on
-      purpose: putting a number on a paper with no established citation history yet is exactly the kind of
-      overclaim this project is arguing against.
-      <br><br>
-      A gated scorecard still gives you two things beyond the bare numbers. First, a one-line plain-English
-      summary of what the three components look like so far (for example, "strong sustained citation rate, no
-      decline from its peak yet, narrow spread across fields"), so you don't have to interpret three decimals
-      yourself. Second, an optional, explicitly opt-in "provisional signal": a button reveals a number computed
-      with the exact same formula as the real composite, just without the age gate applied. It is deliberately
-      never called a score or a verdict, never assigned a band, and never shown unless you click for it. It's a
-      rough early read on a paper that hasn't earned a real answer yet, and it can move substantially as more
-      citation history accumulates. Both the real composite and this provisional one are computed the same way
-      from the same three components; the only difference is whether the age gate was allowed to withhold the
-      result.</dd>
+    <dd>Overrides everything above. Papers under 10 years old, or whose citation series hasn't yet peaked and
+      declined, don't get an official composite or band. Instead the scorecard shows "Too recent to judge," a
+      plain-English read of the three components so far, and a provisional number computed the same way as the
+      real composite but without the age gate applied. The provisional number is clearly labeled as an early
+      estimate, not a verdict, and can move a lot as more citation history comes in.</dd>
 
     <dt>What this cannot tell you</dt>
     <dd>Whether a paper is actually <em>correct</em>, still clinically relevant, or something practitioners
